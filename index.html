@@ -3,245 +3,253 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
-    <title>QC Audit Pro - Circuit Edition</title>
+    <title>QC Audit Pro - Calibration Inventory</title>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <style>
         :root { 
-            --primary: #00e5ff; /* Electrical Cyan */
-            --success: #28a745; 
-            --danger: #ff1744; 
-            --bg: #0a192f; /* Deep Dark Space */
-            --card-bg: rgba(17, 34, 64, 0.9);
-            --fail-bg: #4a1212;
-            --fail-text: #ff8a80;
+            --primary: #00e5ff; --success: #00e676; --danger: #ff1744; 
+            --bg: #0a192f; --card-bg: rgba(17, 34, 64, 0.95);
         }
 
-        body { font-family: 'Segoe UI', system-ui, sans-serif; margin: 0; padding: 0; background: var(--bg); color: #ccd6f6; overflow-x: hidden; }
+        body { font-family: 'Segoe UI', sans-serif; margin: 0; background: var(--bg); color: #ccd6f6; overflow-x: hidden; }
         
-        /* --- Electrical Login Page Style --- */
-        #loginOverlay { 
-            position: fixed; inset: 0; 
-            background: radial-gradient(circle at center, #112240 0%, #0a192f 100%);
-            display: flex; align-items: center; justify-content: center; z-index: 1000; 
-        }
-
-        /* Animated Circuit Background Lines */
-        .circuit-bg {
-            position: absolute; width: 100%; height: 100%;
-            background-image: 
-                linear-gradient(rgba(0, 229, 255, 0.05) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(0, 229, 255, 0.05) 1px, transparent 1px);
-            background-size: 50px 50px;
-            z-index: -1;
-        }
-
-        .login-card { 
-            background: var(--card-bg); padding: 40px; border-radius: 20px; 
-            width: 320px; text-align: center; 
-            border: 1px solid rgba(0, 229, 255, 0.3);
-            box-shadow: 0 0 20px rgba(0, 229, 255, 0.1);
-            backdrop-filter: blur(10px);
-        }
-
-        .login-card h2 { color: var(--primary); margin-top: 0; letter-spacing: 2px; text-transform: uppercase; font-size: 1.2em; }
-        .login-card input { 
-            width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #233554; 
-            border-radius: 8px; box-sizing: border-box; background: #0a192f; color: white;
-            outline: none; transition: 0.3s;
-        }
-        .login-card input:focus { border-color: var(--primary); box-shadow: 0 0 10px rgba(0,229,255,0.2); }
-
-        /* --- Main App Style --- */
-        #mainApp { display: none; padding: 15px; width: 100%; max-width: 800px; margin: 0 auto; }
+        /* Layout */
+        #loginOverlay { position: fixed; inset: 0; background: radial-gradient(circle, #112240, #0a192f); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+        .login-card { background: var(--card-bg); padding: 40px; border-radius: 20px; width: 320px; text-align: center; border: 1px solid var(--primary); box-shadow: 0 0 20px rgba(0, 229, 255, 0.2); }
+        #mainApp { display: none; padding: 20px; max-width: 1100px; margin: 0 auto; }
         
-        .status-header { display: flex; justify-content: space-between; align-items: center; background: var(--card-bg); padding: 15px; border-radius: 12px; margin-bottom: 10px; border-left: 4px solid var(--primary); }
+        .db-box { background: #112240; border: 2px dashed var(--primary); padding: 15px; border-radius: 12px; margin-bottom: 20px; text-align: center; }
         
-        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
-        .counter-banner { background: #112240; color: var(--primary); padding: 12px; border-radius: 8px; text-align: center; font-weight: bold; border: 1px solid #233554; }
-        .mode-banner { background: #ffc107; color: #000; padding: 12px; border-radius: 8px; text-align: center; font-weight: bold; cursor: pointer; transition: 0.2s; }
-        .mode-auto { background: #112240; color: var(--primary); border: 1px solid var(--primary); }
-
-        #searchInput { width: 100%; padding: 12px; border: 1px solid #233554; border-radius: 8px; background: #112240; color: white; text-align: center; margin-bottom: 10px; }
+        /* Table Controls */
+        .table-container { background: var(--card-bg); border-radius: 12px; overflow-x: auto; border: 1px solid #233554; margin-top: 10px; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.85em; min-width: 1000px; }
+        th, td { padding: 15px; text-align: left; border-bottom: 1px solid #233554; }
+        th { background: #1d2d50; color: var(--primary); text-transform: uppercase; letter-spacing: 1px; }
         
-        #reader { width: 100%; max-width: 400px; margin: 10px auto; border-radius: 12px; overflow: hidden; display: none; border: 2px solid var(--primary); }
+        /* Comparison Modal */
+        #qcModal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.92); z-index: 2000; align-items: center; justify-content: center; }
+        .modal-content { background: #112240; padding: 25px; border-radius: 20px; width: 90%; max-width: 450px; border: 2px solid var(--primary); box-shadow: 0 0 30px var(--primary); }
         
-        button { padding: 12px; cursor: pointer; border: none; border-radius: 8px; font-weight: bold; transition: 0.2s; }
-        .btn-cam { background: #6f42c1; color: white; }
-        .btn-export { background: var(--success); color: white; }
-        .btn-delete { background: none; color: var(--danger); font-size: 1.2em; padding: 0 5px; }
+        .master-info-box { background: #0a192f; padding: 15px; border-radius: 10px; margin-bottom: 20px; border: 1px solid #233554; }
+        .master-info-box h4 { margin: 0 0 10px 0; color: var(--primary); border-bottom: 1px solid #233554; padding-bottom: 5px; font-size: 1.1em; }
+        .data-row { display: flex; justify-content: space-between; font-size: 0.95em; margin: 8px 0; }
+        .label { color: #8892b0; font-weight: bold; }
 
-        .scroll-table { max-height: 400px; overflow-y: auto; background: var(--card-bg); border-radius: 12px; }
-        table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
-        th, td { border-bottom: 1px solid #233554; padding: 12px; text-align: center; }
-        th { background: #1d2d50; color: var(--primary); position: sticky; top: 0; }
+        .qc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px; }
+        select, input[type="text"], input[type="password"] { width: 100%; padding: 12px; background: #0a192f; color: white; border: 1px solid #233554; border-radius: 8px; box-sizing: border-box; outline: none; }
+        select:focus, input:focus { border-color: var(--primary); }
         
-        .row-fail { background-color: var(--fail-bg) !important; color: var(--fail-text); }
+        .btn { cursor: pointer; border: none; border-radius: 8px; font-weight: bold; transition: 0.2s; }
+        .btn-save { background: var(--primary); color: #000; width: 100%; padding: 15px; margin-top: 10px; font-size: 1em; }
+        .btn-save:hover { opacity: 0.9; transform: scale(0.98); }
+        
+        .row-fail { background: #3d0000 !important; }
+        .status-pill { padding: 2px 8px; border-radius: 4px; font-size: 0.8em; font-weight: bold; }
+        .pill-pass { background: var(--success); color: #000; }
+        .pill-fail { background: var(--danger); color: #fff; }
 
-        /* Modal & Toasts */
-        #formModal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 2000; align-items: center; justify-content: center; }
-        .modal-content { background: #112240; padding: 25px; border-radius: 16px; width: 90%; max-width: 350px; text-align: center; border: 1px solid var(--primary); }
-        select, #remarkInput { width: 100%; padding: 12px; border: 1px solid #233554; border-radius: 8px; background: #0a192f; color: white; margin-bottom: 10px; }
-
-        #toast { visibility: hidden; min-width: 200px; background: var(--primary); color: #000; text-align: center; border-radius: 8px; padding: 16px; position: fixed; z-index: 3000; bottom: 30px; left: 50%; transform: translateX(-50%); font-weight: bold; }
-        #toast.show { visibility: visible; animation: fadein 0.3s, fadeout 0.3s 1s; }
-        @keyframes fadein { from {bottom: 0; opacity: 0;} to {bottom: 30px; opacity: 1;} }
-        @keyframes fadeout { from {bottom: 30px; opacity: 1;} to {bottom: 0; opacity: 0;} }
+        #reader { width: 100%; max-width: 450px; margin: 10px auto; border-radius: 15px; display: none; border: 2px solid var(--primary); overflow: hidden; }
+        .logout-bar { display: flex; justify-content: space-between; align-items: center; background: var(--card-bg); padding: 10px 20px; border-radius: 10px; margin-bottom: 15px; border: 1px solid #233554; }
     </style>
 </head>
 <body>
 
     <div id="loginOverlay">
-        <div class="circuit-bg"></div>
         <div class="login-card">
-            <h2>QC Audit <span style="color:white">Pro</span></h2>
-            <div style="font-size: 0.7em; color: var(--primary); margin-bottom: 20px;">ELECTRICAL COMPONENT LOGISTICS</div>
-            <input type="text" id="username" placeholder="Auditor Name" autocomplete="off">
+            <h2 style="color:var(--primary); margin-bottom: 5px;">QC AUDIT SYSTEM</h2>
+            <p style="font-size: 0.7em; color: #8892b0; margin-bottom: 20px;">VERSION 1.0</p>
+            <input type="text" id="username" placeholder="Auditor Name" style="margin-bottom: 10px;">
             <input type="password" id="password" placeholder="Terminal Password">
-            <button class="btn-export" style="width:100%; background: var(--primary); color: #000;" onclick="checkLogin()">INITIALIZE SYSTEM</button>
+            <button class="btn btn-save" onclick="checkLogin()">INITIALIZE</button>
         </div>
     </div>
 
     <div id="mainApp">
-        <div class="status-header">
-            <div><span style="color: var(--primary)">●</span> <strong>Active User:</strong> <span id="currentUserDisplay"></span></div>
-            <button onclick="location.reload()" style="background:#233554; color:white; padding:5px 10px; font-size:0.8em;">LOGOUT</button>
+        <div class="logout-bar">
+            <span><strong>User:</strong> <span id="userDisp" style="color:var(--primary)">-</span></span>
+            <button onclick="location.reload()" style="background:#233554; color:white; border:none; padding:5px 15px; border-radius:5px; cursor:pointer;">Logout</button>
         </div>
 
-        <div class="info-grid">
-            <div class="counter-banner">SCANS: <span id="totalCount">0</span></div>
-            <div id="modeBtn" class="mode-banner mode-auto" onclick="toggleMode()">MODE: AUTO-SAVE</div>
+        <div class="db-box">
+            <strong style="color:var(--primary)">STEP 1: LOAD MASTER LIST (CSV)</strong><br>
+            <input type="file" id="masterFile" accept=".csv" onchange="loadMasterData(this)" style="margin-top:10px;">
+            <div id="dbStatus" style="font-size: 0.8em; margin-top: 8px; color: #8892b0;">Waiting for .csv file...</div>
         </div>
 
         <div style="display:flex; gap:10px; margin-bottom:15px;">
-            <button class="btn-cam" style="flex:1" onclick="toggleCamera()">📷 CAMERA</button>
-            <button class="btn-export" style="flex:1" onclick="exportToCSV()">📥 EXPORT CSV</button>
+            <button onclick="toggleCamera()" class="btn" style="flex:1; padding:15px; background:#6f42c1; color:white;">📷 USE CAMERA</button>
+            <button onclick="exportToCSV()" class="btn" style="flex:1; padding:15px; background:var(--success); color:#000;">📥 DOWNLOAD REPORT</button>
         </div>
 
         <div id="reader"></div>
-        <input type="text" id="searchInput" placeholder="🔍 Filter Barcodes..." onkeyup="updateTable()">
         <input type="text" id="barcodeCollector" style="position: absolute; opacity: 0;" autocomplete="off">
 
-        <div class="scroll-table">
+        <div class="table-container">
             <table>
                 <thead>
-                    <tr><th>Time</th><th>Barcode</th><th>Loc</th><th>Due</th><th>Rem</th><th></th></tr>
+                    <tr>
+                        <th>Time</th>
+                        <th>Equipment Code</th>
+                        <th>Equipment Name</th>
+                        <th>Location</th>
+                        <th>Due Date</th>
+                        <th>Remark</th>
+                    </tr>
                 </thead>
                 <tbody id="inventoryBody"></tbody>
             </table>
         </div>
-        
-        <button style="background:none; color:#4e5d78; font-size:0.8em; margin-top:20px; width:100%" onclick="clearHistory()">ERASE DATA TERMINAL</button>
+        <button onclick="clearLogs()" style="width:100%; background:none; color:#ff1744; border:none; margin-top:20px; cursor:pointer; font-size:0.8em;">🗑 RESET SCAN HISTORY</button>
     </div>
 
-    <div id="formModal">
+    <div id="qcModal">
         <div class="modal-content">
-            <h3 style="color:var(--primary)">QC DATA ENTRY</h3>
-            <div id="modalBarcode" style="font-family: monospace; margin-bottom:15px; color:white;"></div>
-            <select id="locSelect"><option value="1">Loc: 1 (OK)</option><option value="0">Loc: 0 (FAIL)</option></select>
-            <select id="dueSelect"><option value="1">Due: 1 (OK)</option><option value="0">Due: 0 (FAIL)</option></select>
-            <input type="text" id="remarkInput" placeholder="Enter Remark...">
-            <div style="display:flex; gap:10px;">
-                <button style="background:#233554; color:white; flex:1;" onclick="closeModal()">CANCEL</button>
-                <button style="background:var(--primary); color:#000; flex:2;" onclick="manualSubmit()">SAVE RECORD</button>
+            <h2 style="color:var(--primary); margin-top:0; text-align:center;">AUDIT VERIFICATION</h2>
+            
+            <div class="master-info-box">
+                <h4>System Master Data</h4>
+                <div class="data-row"><span class="label">Code:</span> <span id="mCode" style="color:white; font-family:monospace;">-</span></div>
+                <div class="data-row"><span class="label">Equipment:</span> <span id="mName" style="color:white;">-</span></div>
+                <div class="data-row"><span class="label">Location:</span> <span id="mLoc" style="color:white;">-</span></div>
+                <div class="data-row"><span class="label">Due Date:</span> <span id="mDue" style="color:white;">-</span></div>
             </div>
+            
+            <div class="qc-grid">
+                <div>
+                    <label style="font-size:0.75em; color:var(--primary); display:block; margin-bottom:5px;">Location Check</label>
+                    <select id="qcLoc">
+                        <option value="PASS">Correct</option>
+                        <option value="FAIL">Wrong</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="font-size:0.75em; color:var(--primary); display:block; margin-bottom:5px;">Due Date Check</label>
+                    <select id="qcDue">
+                        <option value="PASS">Valid</option>
+                        <option value="FAIL">Expired</option>
+                    </select>
+                </div>
+            </div>
+            
+            <label style="font-size:0.75em; color:var(--primary); display:block; margin-bottom:5px;">Remark</label>
+            <input type="text" id="qcRemark" placeholder="Optional: e.g. misplaced, damaged...">
+            
+            <button class="btn btn-save" onclick="submitQC()">SAVE AUDIT RECORD</button>
         </div>
     </div>
-
-    <div id="toast">RECORDED</div>
 
     <script>
         const AUTH_PASS = "1234";
         let scanHistory = JSON.parse(localStorage.getItem('scanHistory')) || [];
-        let loggedInUser = "", html5QrCode = null, isAutoMode = true, tempBarcode = "";
+        let masterDB = {}; 
+        let currentItem = null;
+        let loggedInUser = "", html5QrCode = null;
 
         function checkLogin() {
-            const u = document.getElementById('username').value.trim();
-            const p = document.getElementById('password').value;
-            if (u !== "" && p === AUTH_PASS) {
+            const u = document.getElementById('username').value;
+            if (u && document.getElementById('password').value === AUTH_PASS) {
                 loggedInUser = u;
-                document.getElementById('currentUserDisplay').innerText = loggedInUser;
+                document.getElementById('userDisp').innerText = u;
                 document.getElementById('loginOverlay').style.display = 'none';
                 document.getElementById('mainApp').style.display = 'block';
                 initScanner();
                 updateTable();
-            }
+            } else { alert("Incorrect password!"); }
         }
 
-        function toggleMode() {
-            isAutoMode = !isAutoMode;
-            const btn = document.getElementById('modeBtn');
-            btn.innerText = isAutoMode ? "MODE: AUTO-SAVE" : "MODE: MANUAL EDIT";
-            btn.className = isAutoMode ? "mode-banner mode-auto" : "mode-banner";
-            document.getElementById('barcodeCollector').focus();
+        function loadMasterData(input) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const text = e.target.result;
+                const rows = text.split(/\r?\n/).filter(row => row.trim() !== "");
+                masterDB = {};
+                
+                rows.forEach((row, i) => {
+                    if (i === 0) return; 
+                    const c = row.split(',').map(s => s.trim());
+                    if (c[0]) {
+                        masterDB[c[0].toUpperCase()] = {
+                            name: c[1] || "UNKNOWN",
+                            loc: c[2] || "N/A",
+                            due: c[3] || "N/A"
+                        };
+                    }
+                });
+                document.getElementById('dbStatus').innerHTML = `✅ <span style="color:var(--success)">DATABASE READY: ${Object.keys(masterDB).length} ITEMS</span>`;
+            };
+            reader.readAsText(input.files[0]);
         }
 
         function initScanner() {
             const col = document.getElementById('barcodeCollector');
-            document.addEventListener('click', (e) => {
-                if(!["searchInput", "remarkInput", "locSelect", "dueSelect"].includes(e.target.id)) col.focus();
+            document.addEventListener('click', (e) => { 
+                if(document.getElementById('qcModal').style.display !== 'flex') col.focus(); 
             });
             col.focus();
             col.addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') {
-                    const d = col.value.trim();
-                    if (d.length > 0) handleScan(d);
+                    openComparison(col.value.trim().toUpperCase());
                     col.value = "";
                 }
             });
         }
 
-        function handleScan(barcode) {
-            if (isAutoMode) {
-                saveEntry(barcode, "1", "1", "-");
-                showToast("SAVED: " + barcode);
-            } else {
-                tempBarcode = barcode;
-                document.getElementById('modalBarcode').innerText = barcode;
-                document.getElementById('remarkInput').value = "";
-                document.getElementById('formModal').style.display = "flex";
-            }
+        function openComparison(barcode) {
+            const data = masterDB[barcode] || { name: "NOT IN LIST", loc: "N/A", due: "N/A" };
+            currentItem = { barcode, ...data };
+            
+            document.getElementById('mCode').innerText = currentItem.barcode;
+            document.getElementById('mName').innerText = currentItem.name;
+            document.getElementById('mLoc').innerText = currentItem.loc;
+            document.getElementById('mDue').innerText = currentItem.due;
+            
+            document.getElementById('qcLoc').value = "PASS";
+            document.getElementById('qcDue').value = "PASS";
+            document.getElementById('qcRemark').value = "";
+            document.getElementById('qcModal').style.display = 'flex';
         }
 
-        function manualSubmit() {
-            saveEntry(tempBarcode, document.getElementById('locSelect').value, document.getElementById('dueSelect').value, document.getElementById('remarkInput').value.trim() || "-");
-            closeModal();
-        }
+        function submitQC() {
+            const lRes = document.getElementById('qcLoc').value;
+            const dRes = document.getElementById('qcDue').value;
+            
+            const entry = {
+                time: new Date().toLocaleTimeString(),
+                barcode: currentItem.barcode,
+                name: currentItem.name,
+                locRes: lRes,
+                dueRes: dRes,
+                remark: document.getElementById('qcRemark').value || "-",
+                isFail: (lRes === "FAIL" || dRes === "FAIL")
+            };
 
-        function saveEntry(barcode, loc, due, remark) {
-            scanHistory.unshift({ time: new Date().toLocaleTimeString(), barcode, loc, due, remark, user: loggedInUser });
+            scanHistory.unshift(entry);
             localStorage.setItem('scanHistory', JSON.stringify(scanHistory));
+            document.getElementById('qcModal').style.display = 'none';
             updateTable();
-        }
-
-        function deleteRow(index) {
-            if(confirm("Delete this entry?")) {
-                scanHistory.splice(index, 1);
-                localStorage.setItem('scanHistory', JSON.stringify(scanHistory));
-                updateTable();
-            }
+            document.getElementById('barcodeCollector').focus();
         }
 
         function updateTable() {
-            const q = document.getElementById('searchInput').value.toLowerCase();
-            const filtered = scanHistory.filter(i => i.barcode.toLowerCase().includes(q));
-            document.getElementById('totalCount').innerText = scanHistory.length;
-            document.getElementById('inventoryBody').innerHTML = filtered.map((i, idx) => `
-                <tr class="${(i.loc === "0" || i.due === "0") ? 'row-fail' : ''}">
+            document.getElementById('inventoryBody').innerHTML = scanHistory.map(i => `
+                <tr class="${i.isFail ? 'row-fail' : ''}">
                     <td>${i.time}</td>
-                    <td style="font-family:monospace">${i.barcode}</td>
-                    <td>${i.loc}</td><td>${i.due}</td><td>${i.remark}</td>
-                    <td><button class="btn-delete" onclick="deleteRow(${idx})">×</button></td>
+                    <td style="font-family:monospace; font-weight:bold;">${i.barcode}</td>
+                    <td>${i.name}</td>
+                    <td><span class="status-pill ${i.locRes === 'PASS' ? 'pill-pass' : 'pill-fail'}">${i.locRes}</span></td>
+                    <td><span class="status-pill ${i.dueRes === 'PASS' ? 'pill-pass' : 'pill-fail'}">${i.dueRes}</span></td>
+                    <td>${i.remark}</td>
                 </tr>`).join('');
         }
 
-        function showToast(m) { const t = document.getElementById("toast"); t.innerText = m; t.className = "show"; setTimeout(() => t.className = "", 1300); }
-        function closeModal() { document.getElementById('formModal').style.display = "none"; document.getElementById('barcodeCollector').focus(); }
-        function clearHistory() { if(confirm("Wipe all system data?")) { scanHistory = []; localStorage.removeItem('scanHistory'); updateTable(); } }
-        
+        function clearLogs() { if(confirm("Clear all scanned records?")) { scanHistory = []; localStorage.removeItem('scanHistory'); updateTable(); } }
+
         function exportToCSV() {
-            let csv = "Time,Barcode,Loc,Due,Remark,User\n" + scanHistory.map(i => `"${i.time}","${i.barcode}","${i.loc}","${i.due}","${i.remark}","${i.user}"`).join("\n");
-            const blob = new Blob([csv], { type: 'text/csv' });
-            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `QC_Audit.csv`; a.click();
+            let csv = "Time,Barcode,Equipment,Loc_Status,Due_Status,Remark\n" + 
+                      scanHistory.map(i => `"${i.time}","${i.barcode}","${i.name}","${i.locRes}","${i.dueRes}","${i.remark}"`).join("\n");
+            const blob = new Blob([csv], {type:'text/csv'});
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); 
+            a.download = `QC_Report_${new Date().toISOString().slice(0,10)}.csv`; a.click();
         }
 
         async function toggleCamera() {
@@ -249,8 +257,11 @@
             if (!html5QrCode) {
                 r.style.display = "block";
                 html5QrCode = new Html5Qrcode("reader");
-                html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, (text) => {
-                    html5QrCode.stop().then(() => { html5QrCode = null; r.style.display = "none"; handleScan(text); });
+                html5QrCode.start({ facingMode: "environment" }, { fps: 15, qrbox: 250 }, (text) => {
+                    html5QrCode.stop().then(() => {
+                        html5QrCode = null; r.style.display = "none";
+                        openComparison(text.toUpperCase());
+                    });
                 });
             } else { html5QrCode.stop().then(() => { html5QrCode = null; r.style.display = "none"; }); }
         }
