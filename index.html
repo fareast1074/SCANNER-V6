@@ -3,88 +3,79 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Inventory Audit - Advanced Search</title>
-    <script src="https://unpkg.com/html5-qrcode"></script>
+    <title>Pro Inventory - Mindeo CR40 Edition</title>
     <style>
-        body { font-family: sans-serif; max-width: 1000px; margin: auto; padding: 20px; background-color: #f4f4f9; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 1000px; margin: auto; padding: 20px; background-color: #f4f4f9; color: #333; }
+        
+        /* Status Bar */
+        .status-header { display: flex; justify-content: space-between; align-items: center; background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .scanner-info { padding: 10px; background: #d4edda; color: #155724; border-radius: 5px; font-weight: bold; border-left: 5px solid #28a745; }
+        
+        /* Login Screen */
         #loginOverlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #007bff; display: flex; align-items: center; justify-content: center; z-index: 1000; }
-        .login-card { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); width: 90%; max-width: 350px; text-align: center; }
+        .login-card { background: white; padding: 30px; border-radius: 12px; width: 90%; max-width: 350px; text-align: center; }
         .login-card input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
-        .btn-login { background: #28a745; color: white; width: 100%; border: none; padding: 12px; border-radius: 6px; font-weight: bold; cursor: pointer; }
+        
+        /* Layout */
         #mainApp { display: none; }
-        #reader { width: 100%; border: 2px solid #333; border-radius: 8px; overflow: hidden; background: #000; }
-        .controls { margin: 20px 0; display: flex; gap: 10px; flex-wrap: wrap; }
-        button { padding: 10px 20px; cursor: pointer; border: none; border-radius: 4px; font-weight: bold; }
+        .controls { margin: 20px 0; display: flex; gap: 10px; }
+        button { padding: 12px 20px; cursor: pointer; border: none; border-radius: 5px; font-weight: bold; transition: 0.2s; }
         .btn-export { background-color: #28a745; color: white; }
         .btn-clear { background-color: #dc3545; color: white; }
-        .btn-submit { background-color: #007bff; color: white; width: 100%; margin-top: 10px; }
+        .btn-submit { background-color: #007bff; color: white; width: 100%; margin-top: 15px; font-size: 1.1em; }
         .btn-submit:disabled { background-color: #ccc; cursor: not-allowed; }
-        
-        /* Search Bar Styles */
-        .search-container { margin: 15px 0; display: flex; gap: 10px; }
-        .search-input { flex-grow: 1; padding: 10px; border: 2px solid #007bff; border-radius: 4px; }
 
-        #formModal { display: none; position: fixed; z-index: 100; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.6); }
-        .modal-content { background-color: white; margin: 10% auto; padding: 25px; border-radius: 12px; width: 85%; max-width: 400px; }
-        .form-group { margin-bottom: 20px; }
-        input[type="text"] { width: 100%; padding: 10px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
-        
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; background: white; font-size: 0.85em; }
-        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+        /* Search & Table */
+        .search-input { width: 100%; padding: 12px; border: 2px solid #007bff; border-radius: 6px; margin-bottom: 10px; box-sizing: border-box; }
+        .scroll-table { max-height: 450px; overflow-y: auto; background: white; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
+        th, td { border-bottom: 1px solid #eee; padding: 12px; text-align: left; }
         th { background-color: #007bff; color: white; position: sticky; top: 0; }
-        .scroll-table { max-height: 400px; overflow-y: auto; border: 1px solid #ddd; border-radius: 4px; }
+        
+        /* Form Modal */
+        #formModal { display: none; position: fixed; z-index: 100; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); }
+        .modal-content { background: white; margin: 10% auto; padding: 25px; border-radius: 12px; width: 85%; max-width: 400px; }
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; margin-bottom: 10px; font-weight: bold; font-size: 1.1em; }
+        input[type="text"]#remarkInput { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 4px; font-size: 1em; }
+        input[type="checkbox"] { transform: scale(1.5); margin-right: 15px; vertical-align: middle; }
+
+        /* Badges */
+        .badge { padding: 4px 8px; border-radius: 4px; font-size: 0.8em; font-weight: bold; }
+        .badge-sync { background: #d4edda; color: #155724; }
+        .badge-local { background: #fff3cd; color: #856404; }
     </style>
 </head>
 <body>
 
     <div id="loginOverlay">
         <div class="login-card">
-            <h2>Inventory Login</h2>
+            <h2>QC Login</h2>
             <input type="text" id="username" placeholder="Your Name">
             <input type="password" id="password" placeholder="Password">
-            <button class="btn-login" onclick="checkLogin()">Access System</button>
-            <p id="loginError" style="color:red; display:none; margin-top:10px;">Invalid Credentials</p>
+            <button class="btn-export" style="width:100%" onclick="checkLogin()">Login</button>
+            <p id="loginError" style="color:red; display:none; margin-top:10px;">Incorrect Password</p>
         </div>
     </div>
 
     <div id="mainApp">
-        <div style="display:flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #ddd; padding-bottom: 10px;">
-            <h2>📋 Audit Log Scanner</h2>
-            <div>
-                <strong>User: </strong><span id="currentUserDisplay" style="color:#007bff"></span>
-                <button onclick="logout()" style="background:#6c757d; color:white; padding:5px 10px; margin-left:15px; border-radius:4px;">Logout</button>
-            </div>
+        <div class="status-header">
+            <div><strong>Scanned By:</strong> <span id="currentUserDisplay" style="color:#007bff"></span></div>
+            <button onclick="location.reload()" style="background:#6c757d; color:white; padding:5px 15px;">Logout</button>
         </div>
-        
-        <div id="reader" style="margin-top:20px;"></div>
 
-        <div id="formModal">
-            <div class="modal-content">
-                <h3 style="margin-top:0">Scan Details</h3>
-                <p><strong>Item ID:</strong> <span id="modalBarcode" style="color:#007bff; font-family:monospace; font-size:1.2em;"></span></p>
-                <div class="form-group">
-                    <label><input type="checkbox" id="locSticker"> Location Sticker (1/0)</label>
-                </div>
-                <div class="form-group">
-                    <label><input type="checkbox" id="dueSticker"> Due Date Sticker (1/0)</label>
-                </div>
-                <div class="form-group">
-                    <label>Remark <span style="color:red">*</span></label>
-                    <input type="text" id="remarkInput" placeholder="Enter notes..." oninput="validateForm()">
-                </div>
-                <button id="saveBtn" class="btn-submit" onclick="submitData()" disabled>Confirm Entry</button>
-            </div>
+        <div class="scanner-info">
+            🔵 Mindeo CR40 Active: Scanner is acting as a keyboard. Start scanning items now.
         </div>
+
+        <input type="text" id="barcodeCollector" style="position: absolute; opacity: 0; pointer-events: none;">
 
         <div class="controls">
             <button class="btn-export" onclick="exportToCSV()">📥 Export Filtered CSV</button>
-            <button class="btn-clear" onclick="clearData()">🗑️ Reset All Logs</button>
+            <button class="btn-clear" onclick="clearData()">🗑️ Reset History</button>
         </div>
 
-        <div class="search-container">
-            <input type="text" id="searchInput" class="search-input" placeholder="🔍 Search Barcode, Remark, or User..." oninput="updateTable()">
-            <button onclick="clearSearch()" style="background:#eee;">Clear</button>
-        </div>
+        <input type="text" id="searchInput" class="search-input" placeholder="🔍 Search by Barcode, Remark, or User..." oninput="updateTable()">
 
         <div class="scroll-table">
             <table>
@@ -95,7 +86,7 @@
                         <th>Loc</th>
                         <th>Due</th>
                         <th>Remark</th>
-                        <th>Scanned By</th>
+                        <th>Status</th>
                     </tr>
                 </thead>
                 <tbody id="inventoryBody"></tbody>
@@ -103,70 +94,121 @@
         </div>
     </div>
 
+    <div id="formModal">
+        <div class="modal-content">
+            <h2 style="margin-top:0; color:#007bff">Item Details</h2>
+            <p><strong>Barcode:</strong> <span id="modalBarcode" style="font-size:1.4em; letter-spacing:1px;"></span></p>
+            <hr>
+            <div class="form-group">
+                <label><input type="checkbox" id="locSticker"> Location Sticker (1/0)</label>
+            </div>
+            <div class="form-group">
+                <label><input type="checkbox" id="dueSticker"> Due Date Sticker (1/0)</label>
+            </div>
+            <div class="form-group">
+                <label>Remark <span style="color:red">*</span></label>
+                <input type="text" id="remarkInput" placeholder="Enter reason for scan..." oninput="validateForm()">
+            </div>
+            <button id="saveBtn" class="btn-submit" onclick="submitData()" disabled>Confirm & Sync</button>
+        </div>
+    </div>
+
     <script>
         const AUTH_PASS = "1234"; 
+        const CLOUD_URL = "YOUR_EXCEL_OR_GOOGLE_URL_HERE"; // Put your URL here
+        
         let scanHistory = JSON.parse(localStorage.getItem('scanHistory')) || [];
-        let currentBarcode = "";
         let loggedInUser = "";
-        let html5QrcodeScanner;
+        let currentBarcode = "";
 
+        // Login Logic
         function checkLogin() {
-            const userIn = document.getElementById('username').value.trim();
-            const passIn = document.getElementById('password').value;
-            if (userIn !== "" && passIn === AUTH_PASS) {
-                loggedInUser = userIn;
+            const u = document.getElementById('username').value.trim();
+            const p = document.getElementById('password').value;
+            if (u !== "" && p === AUTH_PASS) {
+                loggedInUser = u;
                 document.getElementById('currentUserDisplay').innerText = loggedInUser;
                 document.getElementById('loginOverlay').style.display = 'none';
                 document.getElementById('mainApp').style.display = 'block';
-                startScanner();
+                initScannerListener();
                 updateTable();
             } else {
                 document.getElementById('loginError').style.display = 'block';
             }
         }
 
-        function logout() { location.reload(); }
+        // Mindeo CR40 HID Listener
+        function initScannerListener() {
+            const collector = document.getElementById('barcodeCollector');
+            
+            // Force focus to the hidden input so the CR40 always has a place to type
+            document.addEventListener('click', () => {
+                if(document.getElementById('formModal').style.display !== "block") {
+                    collector.focus();
+                }
+            });
 
-        function startScanner() {
-            html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 15, qrbox: { width: 250, height: 150 } });
-            html5QrcodeScanner.render(onScanSuccess);
+            collector.focus();
+
+            collector.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    const data = collector.value.trim();
+                    if (data.length > 0) processScan(data);
+                    collector.value = "";
+                }
+            });
         }
 
-        function onScanSuccess(decodedText) {
-            if (document.getElementById('formModal').style.display !== "block") {
-                currentBarcode = decodedText;
-                document.getElementById('modalBarcode').innerText = decodedText;
-                document.getElementById('formModal').style.display = "block";
-                document.getElementById('locSticker').checked = false;
-                document.getElementById('dueSticker').checked = false;
-                document.getElementById('remarkInput').value = "";
-                document.getElementById('saveBtn').disabled = true;
-            }
+        function processScan(barcode) {
+            if (document.getElementById('formModal').style.display === "block") return;
+            
+            currentBarcode = barcode;
+            document.getElementById('modalBarcode').innerText = barcode;
+            document.getElementById('formModal').style.display = "block";
+            
+            // Reset fields
+            document.getElementById('locSticker').checked = false;
+            document.getElementById('dueSticker').checked = false;
+            document.getElementById('remarkInput').value = "";
+            document.getElementById('saveBtn').disabled = true;
+
+            // Auto-focus remark field for quick typing
+            setTimeout(() => document.getElementById('remarkInput').focus(), 100);
         }
 
         function validateForm() {
             document.getElementById('saveBtn').disabled = (document.getElementById('remarkInput').value.trim() === "");
         }
 
-        function submitData() {
+        async function submitData() {
             const entry = {
-                id: Date.now(),
+                time: new Date().toLocaleString(),
                 barcode: currentBarcode,
                 loc: document.getElementById('locSticker').checked ? 1 : 0,
                 due: document.getElementById('dueSticker').checked ? 1 : 0,
                 remark: document.getElementById('remarkInput').value.trim(),
                 user: loggedInUser,
-                time: new Date().toLocaleString()
+                synced: false
             };
 
-            scanHistory.unshift(entry);
+            // Close modal and focus back to collector
             document.getElementById('formModal').style.display = "none";
-            saveAndRefresh();
-        }
+            document.getElementById('barcodeCollector').focus();
 
-        function clearSearch() {
-            document.getElementById('searchInput').value = "";
-            updateTable();
+            // Sync with Cloud
+            try {
+                const response = await fetch(CLOUD_URL, {
+                    method: "POST",
+                    mode: "no-cors",
+                    body: JSON.stringify(entry)
+                });
+                entry.synced = true;
+            } catch (err) {
+                console.log("Offline mode: Saved locally only.");
+            }
+
+            scanHistory.unshift(entry);
+            saveAndRefresh();
         }
 
         function updateTable() {
@@ -174,20 +216,23 @@
             const filter = document.getElementById('searchInput').value.toLowerCase();
             tbody.innerHTML = "";
 
-            const filteredData = scanHistory.filter(item => 
+            const filtered = scanHistory.filter(item => 
                 item.barcode.toLowerCase().includes(filter) || 
-                item.remark.toLowerCase().includes(filter) || 
-                item.user.toLowerCase().includes(filter)
+                item.remark.toLowerCase().includes(filter)
             );
 
-            filteredData.forEach(item => {
+            filtered.forEach(item => {
+                const syncBadge = item.synced ? 
+                    '<span class="badge badge-sync">✓ Synced</span>' : 
+                    '<span class="badge badge-local">☁ Pending</span>';
+
                 tbody.innerHTML += `<tr>
                     <td>${item.time.split(',')[1]}</td>
                     <td><strong>${item.barcode}</strong></td>
                     <td>${item.loc}</td>
                     <td>${item.due}</td>
                     <td>${item.remark}</td>
-                    <td>${item.user}</td>
+                    <td>${syncBadge}</td>
                 </tr>`;
             });
         }
@@ -198,29 +243,24 @@
         }
 
         function exportToCSV() {
-            const filter = document.getElementById('searchInput').value.toLowerCase();
-            const dataToExport = scanHistory.filter(item => 
-                item.barcode.toLowerCase().includes(filter) || 
-                item.remark.toLowerCase().includes(filter) || 
-                item.user.toLowerCase().includes(filter)
-            );
-
-            if (dataToExport.length === 0) return alert("No data to export");
-            
-            let csv = "Timestamp,Barcode,Location Sticker,Due Date Sticker,Remark,Scanned By\n";
-            dataToExport.forEach(item => {
-                csv += `"${item.time}","${item.barcode}","${item.loc}","${item.due}","${item.remark}","${item.user}"\n`;
+            let csv = "Time,Barcode,Loc,Due,Remark,User,Synced\n";
+            scanHistory.forEach(i => {
+                csv += `"${i.time}","${i.barcode}","${i.loc}","${i.due}","${i.remark}","${i.user}","${i.synced}"\n`;
             });
-
             const blob = new Blob([csv], { type: 'text/csv' });
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `InventoryLog_Filtered_${new Date().toISOString().slice(0,10)}.csv`;
+            a.download = `Audit_Log_${loggedInUser}.csv`;
             a.click();
         }
 
-        function clearData() { if (confirm("DELETE ALL HISTORY?")) { scanHistory = []; saveAndRefresh(); } }
+        function clearData() {
+            if (confirm("Delete all local history?")) {
+                scanHistory = [];
+                saveAndRefresh();
+            }
+        }
     </script>
 </body>
 </html>
