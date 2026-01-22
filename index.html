@@ -7,13 +7,126 @@
     <script src="https://unpkg.com/html5-qrcode"></script>
     <style>
         :root { 
-            --primary: #00e5ff; --success: #00e676; --danger: #ff1744; 
-            --bg: #0a192f; --card-bg: rgba(17, 34, 64, 0.95);
+            --primary: #00e5ff; 
+            --primary-glow: rgba(0, 229, 255, 0.4);
+            --success: #00e676; 
+            --danger: #ff1744; 
+            --bg: #050a14; 
+            --card-bg: rgba(10, 25, 47, 0.9);
         }
 
         body { font-family: 'Segoe UI', sans-serif; margin: 0; background: var(--bg); color: #ccd6f6; overflow-x: hidden; }
         
-        /* Duplicate Warning Banner */
+        /* --- LOGIN OVERLAY & ANIMATIONS --- */
+        #loginOverlay { 
+            position: fixed; 
+            inset: 0; 
+            background: radial-gradient(circle at center, #112240 0%, #050a14 100%); 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            z-index: 1000; 
+            overflow: hidden;
+        }
+
+        /* Animated Grid Background */
+        #loginOverlay::before {
+            content: "";
+            position: absolute;
+            width: 200%;
+            height: 200%;
+            top: -50%;
+            left: -50%;
+            background-image: 
+                linear-gradient(var(--primary-glow) 1px, transparent 1px),
+                linear-gradient(90deg, var(--primary-glow) 1px, transparent 1px);
+            background-size: 60px 60px;
+            transform: perspective(500px) rotateX(60deg);
+            animation: gridMove 12s linear infinite;
+            opacity: 0.2;
+        }
+
+        @keyframes gridMove {
+            from { transform: perspective(500px) rotateX(60deg) translateY(0); }
+            to { transform: perspective(500px) rotateX(60deg) translateY(60px); }
+        }
+
+        .login-card { 
+            position: relative;
+            background: var(--card-bg); 
+            padding: 40px; 
+            border-radius: 15px; 
+            width: 320px; 
+            text-align: center; 
+            border: 1px solid var(--primary); 
+            box-shadow: 0 0 30px rgba(0, 229, 255, 0.2); 
+            backdrop-filter: blur(10px);
+            animation: cardAppear 0.6s ease-out;
+        }
+
+        @keyframes cardAppear {
+            from { opacity: 0; transform: scale(0.9); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        /* Scanning Line Effect */
+        .scanner-line {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 2px;
+            background: var(--primary);
+            box-shadow: 0 0 15px var(--primary);
+            animation: scanMove 4s linear infinite;
+            opacity: 0.6;
+        }
+
+        @keyframes scanMove {
+            0% { top: 0%; opacity: 0; }
+            50% { opacity: 1; }
+            100% { top: 100%; opacity: 0; }
+        }
+
+        .glitch-title {
+            color: var(--primary);
+            font-size: 1.4em;
+            letter-spacing: 4px;
+            margin-bottom: 25px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .login-card input {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 15px;
+            background: rgba(0,0,0,0.5);
+            border: 1px solid #233554;
+            border-radius: 4px;
+            color: white;
+            outline: none;
+            box-sizing: border-box;
+            transition: 0.3s;
+        }
+
+        .login-card input:focus { border-color: var(--primary); box-shadow: 0 0 10px var(--primary-glow); }
+
+        .btn-init {
+            background: transparent;
+            color: var(--primary);
+            border: 1px solid var(--primary);
+            width: 100%;
+            padding: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.3s;
+            letter-spacing: 2px;
+        }
+
+        .btn-init:hover { background: var(--primary); color: #000; box-shadow: 0 0 20px var(--primary); }
+
+        /* --- MAIN APP STYLES --- */
+        #mainApp { display: none; padding: 20px; max-width: 1100px; margin: 0 auto; animation: fadeIn 0.5s; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
         #alertBanner {
             position: fixed; top: -100px; left: 0; right: 0; 
             background: var(--danger); color: white; padding: 20px;
@@ -22,35 +135,23 @@
         }
         #alertBanner.show { top: 0; }
 
-        /* Layout */
-        #loginOverlay { position: fixed; inset: 0; background: radial-gradient(circle, #112240, #0a192f); display: flex; align-items: center; justify-content: center; z-index: 1000; }
-        .login-card { background: var(--card-bg); padding: 40px; border-radius: 20px; width: 320px; text-align: center; border: 1px solid var(--primary); box-shadow: 0 0 20px rgba(0, 229, 255, 0.2); }
-        #mainApp { display: none; padding: 20px; max-width: 1100px; margin: 0 auto; }
-        
         .db-box { background: #112240; border: 2px dashed var(--primary); padding: 15px; border-radius: 12px; margin-bottom: 20px; text-align: center; }
-        
         .stats-bar { display: flex; gap: 15px; margin-bottom: 15px; }
         .stat-card { flex: 1; background: #112240; padding: 10px; border-radius: 8px; border: 1px solid #233554; text-align: center; }
         .stat-val { font-size: 1.4em; font-weight: bold; display: block; }
         .stat-lbl { font-size: 0.7em; color: #8892b0; text-transform: uppercase; }
 
-        .search-container { margin-bottom: 15px; }
-        #tableSearch { width: 100%; padding: 15px; background: #112240; border: 1px solid var(--primary); border-radius: 10px; color: white; font-size: 1em; box-sizing: border-box; outline: none; }
+        #tableSearch { width: 100%; padding: 15px; background: #112240; border: 1px solid var(--primary); border-radius: 10px; color: white; font-size: 1em; box-sizing: border-box; outline: none; margin-bottom: 15px; }
 
-        .table-container { background: var(--card-bg); border-radius: 12px; overflow-x: auto; border: 1px solid #233554; margin-top: 10px; }
-        table { width: 100%; border-collapse: collapse; font-size: 0.85em; min-width: 1100px; }
+        .table-container { background: var(--card-bg); border-radius: 12px; overflow-x: auto; border: 1px solid #233554; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.85em; min-width: 1000px; }
         th, td { padding: 15px; text-align: left; border-bottom: 1px solid #233554; }
-        th { background: #1d2d50; color: var(--primary); text-transform: uppercase; letter-spacing: 1px; }
+        th { background: #1d2d50; color: var(--primary); text-transform: uppercase; }
         
         #qcModal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.92); z-index: 2000; align-items: center; justify-content: center; }
         .modal-content { background: #112240; padding: 25px; border-radius: 20px; width: 90%; max-width: 450px; border: 2px solid var(--primary); box-shadow: 0 0 30px var(--primary); }
         
-        .master-info-box { background: #0a192f; padding: 15px; border-radius: 10px; margin-bottom: 20px; border: 1px solid #233554; }
-        .data-row { display: flex; justify-content: space-between; font-size: 0.95em; margin: 8px 0; }
-        .label { color: #8892b0; font-weight: bold; }
-
-        .btn { cursor: pointer; border: none; border-radius: 8px; font-weight: bold; transition: 0.2s; }
-        .btn-save { background: var(--primary); color: #000; width: 100%; padding: 15px; margin-top: 10px; font-size: 1em; }
+        .btn-save { background: var(--primary); color: #000; width: 100%; padding: 15px; margin-top: 10px; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; }
         .btn-delete-row { background: rgba(255, 23, 68, 0.1); color: var(--danger); border: 1px solid var(--danger); padding: 5px 12px; border-radius: 5px; cursor: pointer; }
 
         .status-pill { padding: 2px 8px; border-radius: 4px; font-size: 0.8em; font-weight: bold; }
@@ -70,10 +171,18 @@
 
     <div id="loginOverlay">
         <div class="login-card">
-            <h2 style="color:var(--primary); margin-bottom: 5px;">QC AUDIT SYSTEM</h2>
-            <input type="text" id="username" placeholder="Auditor Name" style="margin-bottom: 10px;">
+            <div class="scanner-line"></div>
+            <div class="glitch-title">QC AUDIT SYSTEM</div>
+            <div style="font-size: 0.65em; color: var(--primary); margin-bottom: 15px; letter-spacing: 1px; opacity: 0.8;">AUTHENTICATION REQUIRED</div>
+            
+            <input type="text" id="username" placeholder="Auditor Name" autocomplete="off">
             <input type="password" id="password" placeholder="Terminal Password">
-            <button class="btn btn-save" onclick="checkLogin()">INITIALIZE</button>
+            
+            <button class="btn-init" onclick="checkLogin()">[ INITIALIZE ]</button>
+            
+            <div style="margin-top: 20px; font-size: 0.6em; color: #4e5d72; letter-spacing: 1px;">
+                SECURE ACCESS PORTAL V2.0
+            </div>
         </div>
     </div>
 
@@ -90,8 +199,8 @@
         </div>
 
         <div style="display:flex; gap:10px; margin-bottom:15px;">
-            <button onclick="toggleCamera()" class="btn" style="flex:1; padding:15px; background:#6f42c1; color:white;">📷 USE CAMERA</button>
-            <button onclick="exportToCSV()" class="btn" style="flex:1; padding:15px; background:var(--success); color:#000;">📥 DOWNLOAD REPORT</button>
+            <button onclick="toggleCamera()" style="flex:1; padding:15px; background:#6f42c1; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer;">📷 USE CAMERA</button>
+            <button onclick="exportToCSV()" style="flex:1; padding:15px; background:var(--success); color:#000; border:none; border-radius:8px; font-weight:bold; cursor:pointer;">📥 DOWNLOAD REPORT</button>
         </div>
 
         <div class="stats-bar">
@@ -135,30 +244,30 @@
     <div id="qcModal">
         <div class="modal-content">
             <h2 style="color:var(--primary); margin-top:0; text-align:center;">AUDIT VERIFICATION</h2>
-            <div class="master-info-box">
-                <div class="data-row"><span class="label">Code:</span> <span id="mCode" style="color:white; font-family:monospace;">-</span></div>
-                <div class="data-row"><span class="label">Equipment:</span> <span id="mName" style="color:white;">-</span></div>
-                <div class="data-row"><span class="label">Location:</span> <span id="mLoc" style="color:white;">-</span></div>
-                <div class="data-row"><span class="label">Due Date:</span> <span id="mDue" style="color:white;">-</span></div>
+            <div style="background: #0a192f; padding: 15px; border-radius: 10px; margin-bottom: 20px; border: 1px solid #233554;">
+                <div style="display:flex; justify-content:space-between; margin:8px 0;"><span style="color:#8892b0">Code:</span> <span id="mCode" style="color:white; font-family:monospace;">-</span></div>
+                <div style="display:flex; justify-content:space-between; margin:8px 0;"><span style="color:#8892b0">Equipment:</span> <span id="mName" style="color:white;">-</span></div>
+                <div style="display:flex; justify-content:space-between; margin:8px 0;"><span style="color:#8892b0">Location:</span> <span id="mLoc" style="color:white;">-</span></div>
+                <div style="display:flex; justify-content:space-between; margin:8px 0;"><span style="color:#8892b0">Due Date:</span> <span id="mDue" style="color:white;">-</span></div>
             </div>
-            <div class="qc-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
                 <div>
                     <label style="font-size:0.75em; color:var(--primary); display:block; margin-bottom:5px;">Location</label>
-                    <select id="qcLoc">
+                    <select id="qcLoc" style="width:100%; padding:10px; background:#0a192f; color:white; border:1px solid #233554;">
                         <option value="PASS">Correct</option>
                         <option value="FAIL">Wrong</option>
                     </select>
                 </div>
                 <div>
                     <label style="font-size:0.75em; color:var(--primary); display:block; margin-bottom:5px;">Due Date</label>
-                    <select id="qcDue">
+                    <select id="qcDue" style="width:100%; padding:10px; background:#0a192f; color:white; border:1px solid #233554;">
                         <option value="PASS">Valid</option>
                         <option value="FAIL">Expired</option>
                     </select>
                 </div>
             </div>
             <input type="text" id="qcRemark" style="width:100%; padding:12px; background:#0a192f; color:white; border:1px solid #233554; border-radius:8px; box-sizing:border-box; margin-bottom:10px;" placeholder="Optional remark...">
-            <button class="btn btn-save" onclick="submitQC()">SAVE RECORD</button>
+            <button class="btn-save" onclick="submitQC()">SAVE RECORD</button>
         </div>
     </div>
 
@@ -172,14 +281,15 @@
 
         function checkLogin() {
             const u = document.getElementById('username').value;
-            if (u && document.getElementById('password').value === AUTH_PASS) {
+            const p = document.getElementById('password').value;
+            if (u && p === AUTH_PASS) {
                 loggedInUser = u;
                 document.getElementById('userDisp').innerText = u;
                 document.getElementById('loginOverlay').style.display = 'none';
                 document.getElementById('mainApp').style.display = 'block';
                 initScanner();
                 updateTable();
-            } else { alert("Incorrect password!"); }
+            } else { alert("Access Denied: Incorrect Password"); }
         }
 
         function loadMasterData(input) {
@@ -220,7 +330,6 @@
                 triggerDuplicateBanner(existing.pic, existing.time);
                 return;
             }
-
             const data = masterDB[barcode] || { name: "NOT IN LIST", loc: "N/A", due: "N/A" };
             currentItem = { barcode, ...data };
             document.getElementById('mCode').innerText = currentItem.barcode;
@@ -267,10 +376,8 @@
                 i.name.toLowerCase().includes(searchTerm) ||
                 i.pic.toLowerCase().includes(searchTerm)
             );
-
             document.getElementById('totalScans').innerText = scanHistory.length;
             document.getElementById('totalFails').innerText = scanHistory.filter(i => i.isFail).length;
-
             document.getElementById('inventoryBody').innerHTML = filtered.map(i => `
                 <tr class="${i.isFail ? 'row-fail' : ''}">
                     <td>${i.time}</td>
@@ -287,6 +394,7 @@
         function clearLogs() { if(confirm("Clear ALL logs?")) { scanHistory = []; saveAndRefresh(); } }
 
         function exportToCSV() {
+            if (scanHistory.length === 0) { alert("No data to export"); return; }
             let csv = "Time,Barcode,Equipment,PIC,Loc_Status,Due_Status,Remark\n" + 
                       scanHistory.map(i => `"${i.time}","${i.barcode}","${i.name}","${i.pic}","${i.locRes}","${i.dueRes}","${i.remark}"`).join("\n");
             const blob = new Blob([csv], {type:'text/csv'});
