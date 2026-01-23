@@ -15,6 +15,32 @@ let selectedLoc = "CORRECT";
 let selectedDue = "VALID";
 let selectedMsa = "YES";
 
+// --- NEW: CLOUD SYNC LISTENERS ---
+// 1. Sync Audit History from Cloud
+db.ref('audit_history').on('value', (snapshot) => {
+    const data = snapshot.val();
+    if (data) {
+        // Convert Firebase object to array and sort by time (newest first)
+        const cloudScans = Object.values(data).sort((a, b) => b.id - a.id);
+        scanHistory = cloudScans;
+        localStorage.setItem('audit_history', JSON.stringify(scanHistory));
+        updateDisplay();
+    }
+});
+
+// 2. Sync Master List from Cloud
+db.ref('master_list').on('value', (snapshot) => {
+    const data = snapshot.val();
+    if (data) {
+        masterDB = data.masterDB;
+        rawMasterRows = data.rawMasterRows;
+        localStorage.setItem('master_db', JSON.stringify(masterDB));
+        localStorage.setItem('raw_rows', JSON.stringify(rawMasterRows));
+        rebuildFilters();
+        updateDisplay();
+    }
+});
+
 function checkLogin() {
     const u = document.getElementById('username').value;
     if (u && document.getElementById('password').value === AUTH_PASS) {
@@ -38,10 +64,12 @@ function loadMasterData(input) {
     const reader = new FileReader();
     reader.onload = function(e) {
         const rows = e.target.result.split(/\r?\n/).filter(row => row.trim() !== "");
-        masterDB = {}; rawMasterRows = [];
+        let newMasterDB = {}; 
+        let newRawRows = [];
+        
         rows.forEach((row, i) => {
             const columns = row.split(',').map(s => s.trim());
-            if (i === 0) { rawMasterRows.push(columns); return; }
+            if (i === 0) { newRawRows.push(columns); return; }
             if (!columns[0]) return; 
 
             const fullLoc = columns[2] || "N/A";
@@ -58,9 +86,9 @@ function loadMasterData(input) {
             }
 
             columns[3] = dateCol;
-            rawMasterRows.push(columns);
+            newRawRows.push(columns);
 
-            masterDB[columns[0].toUpperCase()] = { 
+            newMasterDB[columns[0].toUpperCase()] = { 
                 name: columns[1]||"UNKNOWN", 
                 loc: fullLoc, 
                 bldg: (locParts[0] || "N/A").trim(), 
@@ -71,9 +99,12 @@ function loadMasterData(input) {
                 year: y
             };
         });
-        localStorage.setItem('master_db', JSON.stringify(masterDB));
-        localStorage.setItem('raw_rows', JSON.stringify(rawMasterRows));
-        rebuildFilters(); updateDisplay();
+
+        // PUSH MASTER TO CLOUD
+        db.ref('master_list').set({
+            masterDB: newMasterDB,
+            rawMasterRows: newRawRows
+        });
     };
     reader.readAsText(input.files[0]);
 }
@@ -136,7 +167,7 @@ function updateDisplay() {
         <td><span class="status-pill ${i.locRes==='CORRECT'?'pill-pass':'pill-fail'}">${i.locRes}</span></td>
         <td><span class="status-pill ${i.dueRes==='VALID'?'pill-pass':'pill-fail'}">${i.dueRes}</span></td>
         <td><span class="status-pill ${i.msaRes==='YES'?'pill-pass':'pill-fail'}">${i.msaRes}</span></td>
-        <td>${i.remark}</td><td><button class="btn-delete-row" onclick="deleteRow(${i.id}, '${i.cloudId}')">Del</button></td></tr>`).join('');
+        <td>${i.remark}</td><td><button class="btn-delete-row" onclick="deleteRow('${i.cloudId}')">Del</button></td></tr>`).join('');
 
     const scannedIds = new Set(scanHistory.map(x => x.barcode));
     document.getElementById('pendingBody').innerHTML = filteredTargetList.filter(c => {
@@ -207,14 +238,12 @@ function setToggle(type, val) {
 
 function submitQC() {
     if(!currentItem) return;
-    const failed = (selectedLoc === "WRONG" || selectedDue === "EXPIRED" || selectedMsa === "NO" || currentItem.name === "NOT IN DATABASE");
+    const failed = (selectedLoc === "WRONG" || selectedDue === "EXPIRED" || selectedMsa === "" || currentItem.name === "NOT IN DATABASE");
     
-    // Save to Cloud first to get a cloud ID
     const newRef = db.ref('audit_history').push();
-    
     const auditData = {
         id: Date.now(),
-        cloudId: newRef.key, // Store this so we can delete from cloud later
+        cloudId: newRef.key,
         time: new Date().toLocaleTimeString(), 
         barcode: currentItem.barcode, 
         name: currentItem.name, 
@@ -226,10 +255,7 @@ function submitQC() {
         isFail: failed
     };
 
-    newRef.set(auditData); // Push the full data to Firebase
-
-    scanHistory.unshift(auditData);
-    localStorage.setItem('audit_history', JSON.stringify(scanHistory));
+    newRef.set(auditData);
     closeModal();
 }
 
@@ -260,14 +286,9 @@ function resetFilters() {
     updateDisplay();
 }
 
-function deleteRow(id, cloudId) { 
-    if(confirm("Remove this entry?")) {
-        // Remove from cloud if cloudId exists
+function deleteRow(cloudId) { 
+    if(confirm("Remove this entry from Cloud and all devices?")) {
         if(cloudId) db.ref('audit_history/' + cloudId).remove();
-        
-        scanHistory = scanHistory.filter(x => x.id !== id); 
-        localStorage.setItem('audit_history', JSON.stringify(scanHistory));
-        updateDisplay(); 
     }
 }
 
