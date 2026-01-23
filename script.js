@@ -263,7 +263,7 @@ function clearAllCloudData() {
     const masterPass = "F4IZ"; 
     const inputPass = prompt("Enter ADMIN PASSWORD to wipe Cloud Database:");
     if (inputPass === masterPass) {
-        const confirmDelete = prompt("WARNING: This wipes ALL data for ALL users. Type 'CONFIRM' to execute:");
+        const confirmDelete = prompt("WARNING: This wipes ALL data for ALL users. Type 'YES' to execute:");
         if (confirmDelete === "YES") {
             db.ref('audit_history').remove();
             db.ref('master_list').remove();
@@ -319,4 +319,5 @@ async function toggleCamera() {
             html5QrCode.stop().then(() => { html5QrCode = null; r.style.display = "none"; handleScannedCode(text.toUpperCase()); });
         });
     } else { html5QrCode.stop().then(() => { html5QrCode = null; r.style.display = "none"; }); }
+
 }
