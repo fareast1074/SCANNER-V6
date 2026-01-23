@@ -15,20 +15,14 @@ let selectedLoc = "CORRECT";
 let selectedDue = "VALID";
 let selectedMsa = "YES";
 
-// --- NEW: CLOUD SYNC LISTENERS ---
-// 1. Sync Audit History from Cloud
+// --- CLOUD LISTENERS ---
 db.ref('audit_history').on('value', (snapshot) => {
     const data = snapshot.val();
-    if (data) {
-        // Convert Firebase object to array and sort by time (newest first)
-        const cloudScans = Object.values(data).sort((a, b) => b.id - a.id);
-        scanHistory = cloudScans;
-        localStorage.setItem('audit_history', JSON.stringify(scanHistory));
-        updateDisplay();
-    }
+    scanHistory = data ? Object.values(data).sort((a, b) => b.id - a.id) : [];
+    localStorage.setItem('audit_history', JSON.stringify(scanHistory));
+    updateDisplay();
 });
 
-// 2. Sync Master List from Cloud
 db.ref('master_list').on('value', (snapshot) => {
     const data = snapshot.val();
     if (data) {
@@ -66,16 +60,13 @@ function loadMasterData(input) {
         const rows = e.target.result.split(/\r?\n/).filter(row => row.trim() !== "");
         let newMasterDB = {}; 
         let newRawRows = [];
-        
         rows.forEach((row, i) => {
             const columns = row.split(',').map(s => s.trim());
             if (i === 0) { newRawRows.push(columns); return; }
             if (!columns[0]) return; 
-
             const fullLoc = columns[2] || "N/A";
             const locParts = fullLoc.split("-");
             let dateCol = columns[3] || ""; 
-            
             let m = "N/A", y = "N/A";
             if(dateCol.includes("-")) {
                 const parts = dateCol.split("-");
@@ -84,27 +75,15 @@ function loadMasterData(input) {
                 dateCol = m + "-" + yearPart;
                 y = parts[1].length === 2 ? "20" + parts[1] : parts[1];
             }
-
             columns[3] = dateCol;
             newRawRows.push(columns);
-
             newMasterDB[columns[0].toUpperCase()] = { 
-                name: columns[1]||"UNKNOWN", 
-                loc: fullLoc, 
-                bldg: (locParts[0] || "N/A").trim(), 
-                prod: (locParts[1] || "N/A").trim(), 
-                due: dateCol, 
-                msa: columns[4]||"N/A",
-                month: m,
-                year: y
+                name: columns[1]||"UNKNOWN", loc: fullLoc, 
+                bldg: (locParts[0] || "N/A").trim(), prod: (locParts[1] || "N/A").trim(), 
+                due: dateCol, msa: columns[4]||"N/A", month: m, year: y
             };
         });
-
-        // PUSH MASTER TO CLOUD
-        db.ref('master_list').set({
-            masterDB: newMasterDB,
-            rawMasterRows: newRawRows
-        });
+        db.ref('master_list').set({ masterDB: newMasterDB, rawMasterRows: newRawRows });
     };
     reader.readAsText(input.files[0]);
 }
@@ -117,15 +96,12 @@ function rebuildFilters() {
         if(item.month !== "N/A") monthSet.add(item.month);
         if(item.year !== "N/A") yearSet.add(item.year);
     });
-
     const b = document.getElementById('filterBuilding'), p = document.getElementById('filterProduction'),
           m = document.getElementById('filterMonth'), y = document.getElementById('filterYear');
-    
     b.innerHTML = '<option value="">All Buildings</option>';
     p.innerHTML = '<option value="">All Production</option>';
     m.innerHTML = '<option value="">All Months</option>';
     y.innerHTML = '<option value="">All Years</option>';
-
     Array.from(bldgSet).sort().forEach(x => b.innerHTML += `<option value="${x}">${x}</option>`);
     Array.from(prodSet).sort().forEach(x => p.innerHTML += `<option value="${x}">${x}</option>`);
     Array.from(monthSet).sort((a,b) => MONTH_ORDER.indexOf(a) - MONTH_ORDER.indexOf(b)).forEach(x => m.innerHTML += `<option value="${x}">${x}</option>`);
@@ -239,22 +215,13 @@ function setToggle(type, val) {
 function submitQC() {
     if(!currentItem) return;
     const failed = (selectedLoc === "WRONG" || selectedDue === "EXPIRED" || selectedMsa === "" || currentItem.name === "NOT IN DATABASE");
-    
     const newRef = db.ref('audit_history').push();
     const auditData = {
-        id: Date.now(),
-        cloudId: newRef.key,
-        time: new Date().toLocaleTimeString(), 
-        barcode: currentItem.barcode, 
-        name: currentItem.name, 
-        pic: loggedInUser, 
-        locRes: selectedLoc, 
-        dueRes: selectedDue, 
-        msaRes: selectedMsa, 
-        remark: document.getElementById('qcRemark').value || "-", 
-        isFail: failed
+        id: Date.now(), cloudId: newRef.key, time: new Date().toLocaleTimeString(), 
+        barcode: currentItem.barcode, name: currentItem.name, pic: loggedInUser, 
+        locRes: selectedLoc, dueRes: selectedDue, msaRes: selectedMsa, 
+        remark: document.getElementById('qcRemark').value || "-", isFail: failed
     };
-
     newRef.set(auditData);
     closeModal();
 }
@@ -290,6 +257,21 @@ function deleteRow(cloudId) {
     if(confirm("Remove this entry from Cloud and all devices?")) {
         if(cloudId) db.ref('audit_history/' + cloudId).remove();
     }
+}
+
+function clearAllCloudData() {
+    const masterPass = "F4IZ"; 
+    const inputPass = prompt("Enter ADMIN PASSWORD to wipe Cloud Database:");
+    if (inputPass === masterPass) {
+        const confirmDelete = prompt("WARNING: This wipes ALL data for ALL users. Type 'CONFIRM' to execute:");
+        if (confirmDelete === "YES") {
+            db.ref('audit_history').remove();
+            db.ref('master_list').remove();
+            localStorage.clear();
+            alert("Database Wiped. App reloading.");
+            location.reload();
+        } else { alert("Incorrect confirmation text. Action aborted."); }
+    } else { alert("Unauthorized! Invalid Admin Password."); }
 }
 
 function exportToExcel() {

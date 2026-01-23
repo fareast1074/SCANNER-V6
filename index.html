@@ -27,7 +27,12 @@
     <div id="mainApp">
         <div class="user-bar">
             <span>User: <strong id="userDisp" style="color:var(--primary)">-</strong></span>
-            <button onclick="logout()" class="btn-logout">Logout & Clear</button>
+            <div style="display:flex; gap:8px;">
+                <button onclick="clearAllCloudData()" class="btn-logout" style="border: 1px solid var(--danger); color: var(--danger); background: rgba(255, 23, 68, 0.1);">
+                    Clear Cloud
+                </button>
+                <button onclick="logout()" class="btn-logout">Logout & Clear</button>
+            </div>
         </div>
 
         <div class="progress-container" onclick="document.getElementById('pendingBody').scrollIntoView({behavior:'smooth'})">
@@ -131,13 +136,11 @@
             </div>
         </div>
     </div>
-</div>
 
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 
     <script>
-        // YOUR UNIQUE CONFIGURATION
         const firebaseConfig = {
             apiKey: "AIzaSyDTddYSz7aZC6hICa-cYocdHM8my_Hjni0",
             authDomain: "inventory-88cdd.firebaseapp.com",
@@ -148,8 +151,6 @@
             appId: "1:81194057977:web:de522987e70fd2bfeae228",
             measurementId: "G-TX7N8QW16W"
         };
-
-        // Initialize Firebase
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
     </script>
