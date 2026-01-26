@@ -6,6 +6,7 @@ let scanHistory = [];
 let masterDB = {}; 
 let rawMasterRows = []; 
 let pendingUploads = JSON.parse(localStorage.getItem('pending_queue')) || [];
+let activeLocks = {};
 
 let currentItem = null;
 let loggedInUser = "";
@@ -18,7 +19,7 @@ let selectedLoc = "CORRECT";
 let selectedDue = "VALID";
 let selectedMsa = "YES";
 
-// --- CONNECTION HEARTBEAT & OFFLINE QUEUE PROCESSING ---
+// --- CONNECTION HEARTBEAT & SYNC ---
 const syncIcon = document.getElementById('syncStatus');
 db.ref(".info/connected").on("value", (snap) => {
     isOnline = snap.val() === true;
@@ -32,14 +33,38 @@ db.ref(".info/connected").on("value", (snap) => {
     }
 });
 
-function processOfflineQueue() {
+// --- UPDATED OFFLINE SYNC WITH PROGRESS & CONFLICT CHECK ---
+async function processOfflineQueue() {
     if (pendingUploads.length > 0 && isOnline) {
-        pendingUploads.forEach((data) => {
-            db.ref('audit_history').push(data);
-        });
+        const historyRef = db.ref('audit_history');
+        const total = pendingUploads.length;
+        
+        const progressCont = document.getElementById('syncProgressContainer');
+        const progressBar = document.getElementById('syncProgressBar');
+        progressCont.style.display = 'block';
+
+        for (let i = 0; i < total; i++) {
+            const data = pendingUploads[i];
+            const percent = ((i + 1) / total) * 100;
+            progressBar.style.width = percent + "%";
+
+            // CONFLICT CHECK: First to Cloud wins
+            const snapshot = await historyRef.orderByChild('barcode').equalTo(data.barcode).once('value');
+            if (!snapshot.exists()) {
+                const newRef = historyRef.push();
+                data.cloudId = newRef.key;
+                await newRef.set(data);
+            }
+        }
+
+        setTimeout(() => {
+            progressCont.style.display = 'none';
+            progressBar.style.width = '0%';
+        }, 1200);
+
         pendingUploads = [];
         localStorage.removeItem('pending_queue');
-        console.log("Offline scans synced to Cloud.");
+        updateDisplay();
     }
 }
 
@@ -60,6 +85,28 @@ db.ref('master_list').on('value', (snapshot) => {
     }
 });
 
+db.ref('temporary_locks').on('value', (snap) => {
+    activeLocks = snap.val() || {};
+    updateDisplay();
+});
+
+// --- LOCKING LOGIC ---
+function attemptLock(barcode) {
+    const lockRef = db.ref('temporary_locks/' + barcode);
+    return lockRef.transaction((currentData) => {
+        if (currentData === null || (Date.now() - currentData.time > 300000)) {
+            return { user: loggedInUser, time: Date.now() };
+        } else { return; } 
+    });
+}
+
+function releaseLock(barcode) {
+    if (barcode && isOnline) {
+        db.ref('temporary_locks/' + barcode).remove();
+    }
+}
+
+// --- AUTH & SETUP ---
 function checkLogin() {
     const u = document.getElementById('username').value;
     if (u && document.getElementById('password').value === AUTH_PASS) {
@@ -167,7 +214,12 @@ function updateDisplay() {
     document.getElementById('pendingBody').innerHTML = filteredTargetList.filter(c => {
         const item = masterDB[c];
         return !scannedIds.has(c) && (c.includes(s) || item.name.toUpperCase().includes(s));
-    }).map(c => `<tr><td>${c}</td><td>${masterDB[c].name}</td><td>${masterDB[c].loc}</td><td>${masterDB[c].due}</td><td>${masterDB[c].msa}</td></tr>`).join('');
+    }).map(c => {
+        const lock = activeLocks[c];
+        const lockStyle = lock ? 'style="background: rgba(168, 85, 247, 0.15); border-left: 3px solid #a855f7;"' : '';
+        const lockTag = lock ? `<span style="color:#a855f7; font-size:10px;">🔒 ${lock.user}</span>` : '';
+        return `<tr ${lockStyle}><td>${c} ${lockTag}</td><td>${masterDB[c].name}</td><td>${masterDB[c].loc}</td><td>${masterDB[c].due}</td><td>${masterDB[c].msa}</td></tr>`;
+    }).join('');
 }
 
 function drawGauge(percent) { targetGaugeValue = percent; animateGauge(); }
@@ -187,8 +239,11 @@ function animateGauge() {
     document.getElementById('progressPercent').innerText = Math.round(currentGaugeValue) + "%";
 }
 
-function handleScannedCode(barcode) {
+// --- SCAN HANDLING WITH COLLISION LOCK ---
+async function handleScannedCode(barcode) {
     if (!barcode) return;
+
+    // 1. DUPLICATE CHECK
     const existing = scanHistory.find(item => item.barcode === barcode);
     if (existing) {
         document.getElementById('prevPIC').innerText = existing.pic;
@@ -197,6 +252,19 @@ function handleScannedCode(barcode) {
         setTimeout(() => document.getElementById('alertBanner').classList.remove('show'), 4000);
         return;
     }
+
+    // 2. COLLISION CHECK
+    if (isOnline) {
+        const lock = activeLocks[barcode];
+        if (lock && lock.user !== loggedInUser) {
+            alert(`COLLISION: ${lock.user} is currently auditing this!`);
+            return;
+        }
+        const lockRes = await attemptLock(barcode);
+        if (!lockRes.committed) return alert("System busy: Try again.");
+    }
+
+    // 3. OPEN MODAL
     const data = masterDB[barcode] || { name: "NOT IN DATABASE", loc: "N/A", due: "N/A", msa: "N/A" };
     currentItem = { barcode, ...data };
     document.getElementById('modalDataBox').innerHTML = `
@@ -242,16 +310,17 @@ function submitQC() {
         auditData.cloudId = newRef.key;
         newRef.set(auditData);
     } else {
-        alert("OFFLINE! Scan saved locally and will sync when reconnected.");
+        alert("OFFLINE! Scan saved locally.");
         pendingUploads.push(auditData);
         localStorage.setItem('pending_queue', JSON.stringify(pendingUploads));
-        scanHistory.unshift(auditData); // Show it in UI immediately
+        scanHistory.unshift(auditData);
         updateDisplay();
     }
     closeModal();
 }
 
 function closeModal() {
+    if (currentItem) releaseLock(currentItem.barcode);
     document.getElementById('qcModal').style.display = 'none';
     document.getElementById('qcRemark').value = "";
     currentItem = null; updateDisplay();
@@ -283,11 +352,12 @@ function deleteRow(cloudId) {
 }
 
 function clearAllCloudData() {
-    const inputPass = prompt("Enter ADMIN PASSWORD to wipe Cloud Database:");
+    const inputPass = prompt("Enter ADMIN PASSWORD:");
     if (inputPass === MASTER_PASS) {
-        if (confirm("FINAL WARNING: This deletes EVERYTHING. Continue?")) {
+        if (confirm("Delete EVERYTHING?")) {
             db.ref('audit_history').remove();
             db.ref('master_list').remove();
+            db.ref('temporary_locks').remove();
             location.reload();
         }
     } else { alert("Unauthorized!"); }
@@ -330,6 +400,6 @@ async function toggleCamera() {
         html5QrCode = new Html5Qrcode("reader");
         html5QrCode.start({ facingMode: "environment" }, { fps: 15, qrbox: 250 }, (text) => {
             html5QrCode.stop().then(() => { html5QrCode = null; r.style.display = "none"; handleScannedCode(text.toUpperCase()); });
-        });
+        }).catch(err => alert("Camera Error: Use HTTPS and allow access."));
     } else { html5QrCode.stop().then(() => { html5QrCode = null; r.style.display = "none"; }); }
 }
