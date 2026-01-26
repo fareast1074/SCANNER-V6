@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
-    <title>QC Audit Pro - Calibration Inventory</title>
+    <title>GRID | Calibration Command Center</title>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
     <link rel="stylesheet" href="style.css">
@@ -14,17 +14,21 @@
         ⚠️ DUPLICATE DETECTED: Scanned by <span id="prevPIC">-</span> at <span id="prevTime">-</span>
     </div>
 
+    <div id="syncProgressContainer" style="display:none; position: fixed; top: 0; left: 0; width:100%; background:rgba(0,0,0,0.5); height:4px; z-index: 9999;">
+        <div id="syncProgressBar" style="width:0%; height:100%; background:#00e676; transition: width 0.3s; box-shadow: 0 0 10px #00e676;"></div>
+    </div>
+
     <div id="loginOverlay">
         <div class="login-card">
             <div class="scanner-line"></div>
-            <div class="glitch-title">CALIBRATION INVENTORY</div>
+            <div class="glitch-title">CALIBRATION SYSTEM</div>
             <input type="text" id="username" placeholder=" Name" autocomplete="off">
             <input type="password" id="password" placeholder="Password">
             <button class="btn-init" onclick="checkLogin()">[ LOGIN ]</button>
         </div>
     </div>
 
-    <div id="mainApp">
+    <div id="mainApp" style="display:none;">
         <div class="user-bar">
             <div style="display:flex; align-items:center; gap:10px;">
                 <div id="syncStatus" title="Cloud Connection Status" 
