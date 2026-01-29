@@ -398,8 +398,9 @@ async function toggleCamera() {
     if (!html5QrCode) {
         r.style.display = "block";
         html5QrCode = new Html5Qrcode("reader");
-        html5QrCode.start({ facingMode: "environment" }, { fps: 15, qrbox: 250 }, (text) => {
+        html5QrCode.start({ facingMode: "environment" }, { fps: 30, qrbox: 300 }, (text) => {
             html5QrCode.stop().then(() => { html5QrCode = null; r.style.display = "none"; handleScannedCode(text.toUpperCase()); });
         }).catch(err => alert("Camera Error: Use HTTPS and allow access."));
     } else { html5QrCode.stop().then(() => { html5QrCode = null; r.style.display = "none"; }); }
 }
+
