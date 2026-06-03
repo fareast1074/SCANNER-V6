@@ -148,24 +148,29 @@ function loadMasterData(input) {
 
 // --- UI & FILTERING ---
 function rebuildFilters() {
-    let bldgSet = new Set(), prodSet = new Set(), monthSet = new Set(), yearSet = new Set();
+    let bldgSet = new Set(), prodSet = new Set(), monthSet = new Set(), yearSet = new Set(), statusSet = new Set();
     Object.values(masterDB).forEach(item => {
         if(item.bldg !== "N/A") bldgSet.add(item.bldg);
         if(item.prod !== "N/A") prodSet.add(item.prod);
         if(item.month !== "N/A") monthSet.add(item.month);
         if(item.year !== "N/A") yearSet.add(item.year);
+        if(item.status !== "N/A") statusSet.add(item.status);
     });
     const b = document.getElementById('filterBuilding'), p = document.getElementById('filterProduction'),
-          m = document.getElementById('filterMonth'), y = document.getElementById('filterYear');
-    if(!b || !p || !m || !y) return;
+          m = document.getElementById('filterMonth'), y = document.getElementById('filterYear'),
+          st = document.getElementById('filterStatus');
+    if(!b || !p || !m || !y || !st) return;
     b.innerHTML = '<option value="">All Buildings</option>';
     p.innerHTML = '<option value="">All Production</option>';
     m.innerHTML = '<option value="">All Months</option>';
     y.innerHTML = '<option value="">All Years</option>';
+    st.innerHTML = '<option value="">All Status</option>';
+    
     Array.from(bldgSet).sort().forEach(x => b.innerHTML += `<option value="${x}">${x}</option>`);
     Array.from(prodSet).sort().forEach(x => p.innerHTML += `<option value="${x}">${x}</option>`);
     Array.from(monthSet).sort((a,b) => MONTH_ORDER.indexOf(a) - MONTH_ORDER.indexOf(b)).forEach(x => m.innerHTML += `<option value="${x}">${x}</option>`);
     Array.from(yearSet).sort((a,b) => parseInt(a) - parseInt(b)).forEach(x => y.innerHTML += `<option value="${x}">${x}</option>`);
+    Array.from(statusSet).sort().forEach(x => st.innerHTML += `<option value="${x}">${x}</option>`);
 }
 
 function updateDisplay() {
@@ -174,34 +179,35 @@ function updateDisplay() {
     const pf = document.getElementById('filterProduction').value;
     const mf = document.getElementById('filterMonth').value;
     const yf = document.getElementById('filterYear').value;
+    const st = document.getElementById('filterStatus').value;
     
     const allCodes = Object.keys(masterDB);
     const filteredTargetList = allCodes.filter(code => {
         const item = masterDB[code];
-        return (!bf || item.bldg === bf) && (!pf || item.prod === pf) && (!mf || item.month === mf) && (!yf || item.year === yf);
+        return (!bf || item.bldg === bf) && (!pf || item.prod === pf) && (!mf || item.month === mf) && (!yf || item.year === yf) && (!st || item.status === st);
     });
 
     const currentAuditResults = scanHistory.filter(h => {
         const m = masterDB[h.barcode.toUpperCase()];
         if (!m) return false;
-        return (!bf || m.bldg === bf) && (!pf || m.prod === pf) && (!mf || m.month === mf) && (!yf || m.year === yf);
+        return (!bf || m.bldg === bf) && (!pf || m.prod === pf) && (!mf || m.month === mf) && (!yf || m.year === yf) && (!st || m.status === st);
     });
 
     const scannedInTarget = currentAuditResults.length;
 
-let per = filteredTargetList.length > 0
-    ? Math.min(100, Math.round((scannedInTarget / filteredTargetList.length) * 100))
-    : 0;
+    let per = filteredTargetList.length > 0
+        ? Math.min(100, Math.round((scannedInTarget / filteredTargetList.length) * 100))
+        : 0;
 
-document.getElementById('progressSubLabel').innerText = `Scanned: ${scannedInTarget} / ${filteredTargetList.length}`;
+    document.getElementById('progressSubLabel').innerText = `Scanned: ${scannedInTarget} / ${filteredTargetList.length}`;
 
-drawGauge(per);
+    drawGauge(per);
 
     updateFailureChart(currentAuditResults.filter(h => h.isFail));
 
     document.getElementById('totalScans').innerText = scanHistory.length;
     document.getElementById('totalFails').innerText = scanHistory.filter(x => x.isFail).length;
-	document.getElementById('totalNotScanned').innerText = Math.max(filteredTargetList.length - scannedInTarget, 0);
+    document.getElementById('totalNotScanned').innerText = Math.max(filteredTargetList.length - scannedInTarget, 0);
 
     document.getElementById('inventoryBody').innerHTML = scanHistory
         .filter(h => h.barcode.toUpperCase().includes(s) || h.name.toUpperCase().includes(s))
@@ -543,6 +549,7 @@ function resetFilters() {
     document.getElementById('filterProduction').value = "";
     document.getElementById('filterMonth').value = "";
     document.getElementById('filterYear').value = "";
+    document.getElementById('filterStatus').value = "";
     updateDisplay();
 }
 
