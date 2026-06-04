@@ -147,50 +147,85 @@ function loadMasterData(input) {
 }
 
 // --- UI & FILTERING ---
+// --- UPDATED UI & FILTERING ---
 function rebuildFilters() {
-    let bldgSet = new Set(), prodSet = new Set(), monthSet = new Set(), yearSet = new Set(), statusSet = new Set();
+    let bldgSet = new Set();
+    let prodSet = new Set();
+    let monthSet = new Set();
+    let yearSet = new Set();
+    let statusSet = new Set();
+
     Object.values(masterDB).forEach(item => {
-        if(item.bldg !== "N/A") bldgSet.add(item.bldg);
-        if(item.prod !== "N/A") prodSet.add(item.prod);
-        if(item.month !== "N/A") monthSet.add(item.month);
-        if(item.year !== "N/A") yearSet.add(item.year);
-        if(item.status !== "N/A") statusSet.add(item.status);
+        if (item.bldg !== "N/A") bldgSet.add(item.bldg);
+        if (item.prod !== "N/A") prodSet.add(item.prod);
+        if (item.month !== "N/A") monthSet.add(item.month);
+        if (item.year !== "N/A") yearSet.add(item.year);
+        if (item.status !== "N/A") statusSet.add(item.status);
     });
-    const b = document.getElementById('filterBuilding'), p = document.getElementById('filterProduction'),
-          m = document.getElementById('filterMonth'), y = document.getElementById('filterYear'),
-          st = document.getElementById('filterStatus');
-    if(!b || !p || !m || !y || !st) return;
+
+    const b = document.getElementById('filterBuilding');
+    const p = document.getElementById('filterProduction');
+    const m = document.getElementById('filterMonth');
+    const y = document.getElementById('filterYear');
+    const st = document.getElementById('filterStatus');
+
+    if (!b || !p || !m || !y || !st) return;
+
     b.innerHTML = '<option value="">All Buildings</option>';
-    p.innerHTML = '<option value="">All Production</option>';
+    p.innerHTML = '';
     m.innerHTML = '<option value="">All Months</option>';
     y.innerHTML = '<option value="">All Years</option>';
-    st.innerHTML = '<option value="">All Status</option>';
-    
+    st.innerHTML = '';
+
     Array.from(bldgSet).sort().forEach(x => b.innerHTML += `<option value="${x}">${x}</option>`);
     Array.from(prodSet).sort().forEach(x => p.innerHTML += `<option value="${x}">${x}</option>`);
-    Array.from(monthSet).sort((a,b) => MONTH_ORDER.indexOf(a) - MONTH_ORDER.indexOf(b)).forEach(x => m.innerHTML += `<option value="${x}">${x}</option>`);
-    Array.from(yearSet).sort((a,b) => parseInt(a) - parseInt(b)).forEach(x => y.innerHTML += `<option value="${x}">${x}</option>`);
+    Array.from(monthSet).sort((a, b) => MONTH_ORDER.indexOf(a) - MONTH_ORDER.indexOf(b)).forEach(x => m.innerHTML += `<option value="${x}">${x}</option>`);
+    Array.from(yearSet).sort((a, b) => parseInt(a) - parseInt(b)).forEach(x => y.innerHTML += `<option value="${x}">${x}</option>`);
     Array.from(statusSet).sort().forEach(x => st.innerHTML += `<option value="${x}">${x}</option>`);
+}
+
+function getMultiSelectValues(elementId) {
+    const el = document.getElementById(elementId);
+    if (!el) return [];
+    return Array.from(el.selectedOptions)
+        .map(option => option.value)
+        .filter(value => value !== "");
 }
 
 function updateDisplay() {
     const s = document.getElementById('globalSearch').value.toUpperCase();
     const bf = document.getElementById('filterBuilding').value;
-    const pf = document.getElementById('filterProduction').value;
     const mf = document.getElementById('filterMonth').value;
     const yf = document.getElementById('filterYear').value;
-    const st = document.getElementById('filterStatus').value;
-    
+
+    const selectedProductions = getMultiSelectValues('filterProduction');
+    const selectedStatuses = getMultiSelectValues('filterStatus');
+
     const allCodes = Object.keys(masterDB);
     const filteredTargetList = allCodes.filter(code => {
         const item = masterDB[code];
-        return (!bf || item.bldg === bf) && (!pf || item.prod === pf) && (!mf || item.month === mf) && (!yf || item.year === yf) && (!st || item.status === st);
+        const matchesProduction = selectedProductions.length === 0 || selectedProductions.includes(item.prod);
+        const matchesStatus = selectedStatuses.length === 0 || selectedStatuses.includes(item.status);
+
+        return (!bf || item.bldg === bf) &&
+               matchesProduction &&
+               (!mf || item.month === mf) &&
+               (!yf || item.year === yf) &&
+               matchesStatus;
     });
 
     const currentAuditResults = scanHistory.filter(h => {
         const m = masterDB[h.barcode.toUpperCase()];
         if (!m) return false;
-        return (!bf || m.bldg === bf) && (!pf || m.prod === pf) && (!mf || m.month === mf) && (!yf || m.year === yf) && (!st || m.status === st);
+
+        const matchesProduction = selectedProductions.length === 0 || selectedProductions.includes(m.prod);
+        const matchesStatus = selectedStatuses.length === 0 || selectedStatuses.includes(m.status);
+
+        return (!bf || m.bldg === bf) &&
+               matchesProduction &&
+               (!mf || m.month === mf) &&
+               (!yf || m.year === yf) &&
+               matchesStatus;
     });
 
     const scannedInTarget = currentAuditResults.length;
@@ -202,7 +237,6 @@ function updateDisplay() {
     document.getElementById('progressSubLabel').innerText = `Scanned: ${scannedInTarget} / ${filteredTargetList.length}`;
 
     drawGauge(per);
-
     updateFailureChart(currentAuditResults.filter(h => h.isFail));
 
     document.getElementById('totalScans').innerText = scanHistory.length;
@@ -218,10 +252,10 @@ function updateDisplay() {
                 <td style="word-break:break-all; font-size:10px;">${i.barcode}</td>
                 <td>${i.name}</td>
                 <td style="color:var(--primary)">${i.pic}</td>
-                <td><span class="status-pill ${i.locRes==='CORRECT'?'pill-pass':'pill-fail'}">${i.locRes}</span></td>
-                <td><span class="status-pill ${i.dueRes==='VALID'?'pill-pass':'pill-fail'}">${i.dueRes}</span></td>
+                <td><span class="status-pill ${i.locRes === 'CORRECT' ? 'pill-pass' : 'pill-fail'}">${i.locRes}</span></td>
+                <td><span class="status-pill ${i.dueRes === 'VALID' ? 'pill-pass' : 'pill-fail'}">${i.dueRes}</span></td>
                 <td>${originalStatus}</td>
-                <td><span class="status-pill ${i.msaRes==='YES'?'pill-pass':'pill-fail'}">${i.msaRes}</span></td>
+                <td><span class="status-pill ${i.msaRes === 'YES' ? 'pill-pass' : 'pill-fail'}">${i.msaRes}</span></td>
                 <td>${i.remark}</td>
                 <td><button class="btn-delete-row" onclick="deleteRow('${i.cloudId}')">Del</button></td>
             </tr>`;
@@ -244,6 +278,59 @@ function updateDisplay() {
             <td>${masterDB[c].msa}</td>
         </tr>`;
     }).join('');
+}
+
+function exportFilteredOnly() {
+    const bf = document.getElementById('filterBuilding').value;
+    const mf = document.getElementById('filterMonth').value;
+    const yf = document.getElementById('filterYear').value;
+
+    const selectedProductions = getMultiSelectValues('filterProduction');
+    const selectedStatuses = getMultiSelectValues('filterStatus');
+
+    const auditHeader = ["EQUIPMENT CODE", "EQUIPMENT NAME", "LOCATION", "DUE DATE", "STATUS", "MSA", "Audit Status", "Date/Time", "Auditor", "Loc_Audit", "Due_Audit", "MSA_Audit", "Remark"];
+    let auditData = [auditHeader];
+
+    rawMasterRows.slice(1).forEach(r => {
+        const code = r[0].toUpperCase();
+        const item = masterDB[code];
+        if (!item) return;
+
+        const baseRow = r.slice(0, 6);
+        const matchesProduction = selectedProductions.length === 0 || selectedProductions.includes(item.prod);
+        const matchesStatus = selectedStatuses.length === 0 || selectedStatuses.includes(item.status);
+
+        if ((!bf || item.bldg === bf) &&
+            matchesProduction &&
+            (!mf || item.month === mf) &&
+            (!yf || item.year === yf) &&
+            matchesStatus) {
+
+            const s = scanHistory.find(h => h.barcode.toUpperCase() === code);
+            if (s) {
+                const statusLabel = s.isFail ? "FAIL (AUDIT)" : "SCANNED";
+                auditData.push([...baseRow, statusLabel, s.time, s.pic, s.locRes, s.dueRes, s.msaRes, s.remark]);
+            } else {
+                auditData.push([...baseRow, "PENDING", "", "", "", "", "", ""]);
+            }
+        }
+    });
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(auditData), "Filtered Audit");
+    XLSX.writeFile(wb, `Audit_Report_Filtered.xlsx`);
+}
+
+function resetFilters() {
+    document.getElementById('globalSearch').value = "";
+    document.getElementById('filterBuilding').value = "";
+    document.getElementById('filterMonth').value = "";
+    document.getElementById('filterYear').value = "";
+
+    Array.from(document.getElementById('filterProduction').options).forEach(opt => opt.selected = false);
+    Array.from(document.getElementById('filterStatus').options).forEach(opt => opt.selected = false);
+
+    updateDisplay();
 }
 
 function updateFailureChart(failedItems) {
@@ -513,44 +600,8 @@ function exportToExcel() {
     XLSX.writeFile(wb, `Audit_Report_Full.xlsx`);
 }
 
-function exportFilteredOnly() {
-    const bf = document.getElementById('filterBuilding').value;
-    const pf = document.getElementById('filterProduction').value;
-    const mf = document.getElementById('filterMonth').value;
-    const yf = document.getElementById('filterYear').value;
-    const auditHeader = ["EQUIPMENT CODE", "EQUIPMENT NAME", "LOCATION", "DUE DATE", "STATUS", "MSA", "Audit Status", "Date/Time", "Auditor", "Loc_Audit", "Due_Audit", "MSA_Audit", "Remark"];
-    let auditData = [auditHeader];
-    rawMasterRows.slice(1).forEach(r => {
-        const code = r[0].toUpperCase();
-        const item = masterDB[code];
-        const baseRow = r.slice(0, 6);
-        if (item && (!bf || item.bldg === bf) && (!pf || item.prod === pf) && (!mf || item.month === mf) && (!yf || item.year === yf)) {
-            const s = scanHistory.find(h => h.barcode.toUpperCase() === code);
-            if (s) {
-                const statusLabel = s.isFail ? "FAIL (AUDIT)" : "SCANNED";
-                auditData.push([...baseRow, statusLabel, s.time, s.pic, s.locRes, s.dueRes, s.msaRes, s.remark]);
-            } else {
-                auditData.push([...baseRow, "PENDING", "", "", "", "", "", ""]);
-            }
-        }
-    });
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(auditData), "Filtered Audit");
-    XLSX.writeFile(wb, `Audit_Report_Filtered.xlsx`);
-}
-
 function deleteRow(cloudId) { 
     if(confirm("Remove from Cloud?")) { if(cloudId) db.ref('audit_history/' + cloudId).remove(); }
-}
-
-function resetFilters() {
-    document.getElementById('globalSearch').value = "";
-    document.getElementById('filterBuilding').value = "";
-    document.getElementById('filterProduction').value = "";
-    document.getElementById('filterMonth').value = "";
-    document.getElementById('filterYear').value = "";
-    document.getElementById('filterStatus').value = "";
-    updateDisplay();
 }
 
 async function toggleCamera() {
