@@ -76,10 +76,14 @@
         <div id="filterZone" class="filter-panel">
             <input type="text" id="globalSearch" placeholder="🔍 Search..." oninput="updateDisplay()">
             <select id="filterBuilding" onchange="updateDisplay()"><option value="">All Buildings</option></select>
-            <select id="filterProduction" onchange="updateDisplay()"><option value="">All Production</option></select>
+            <select id="filterProduction" multiple onchange="updateDisplay()" size="1">
+</select>
             <select id="filterMonth" onchange="updateDisplay()"><option value="">All Months</option></select>
             <select id="filterYear" onchange="updateDisplay()"><option value="">All Years</option></select>
-            <select id="filterStatus" onchange="updateDisplay()"><option value="">All Status</option></select>
+            
+            <select id="filterStatus" multiple onchange="updateDisplay()" size="1" style="min-width: 140px; height: calc(2.5em + 2px); padding: 5px; vertical-align: top;">
+            </select>
+            
             <div style="display: flex; gap: 8px;">
                 <button onclick="resetFilters()" class="btn-filter-action">Reset</button>
                 <button onclick="exportFilteredOnly()" class="btn-excel">Excel</button>
@@ -186,7 +190,7 @@
                     <option value="System not tally">
                     <option value="Location not match">
                     <option value="Wrong due date">
-                    
+                     
                 </datalist>
             </div>
             <div style="display: flex; gap: 10px; margin-top: 20px;">
