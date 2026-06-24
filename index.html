@@ -75,9 +75,8 @@
 
         <div id="filterZone" class="filter-panel">
             <input type="text" id="globalSearch" placeholder="🔍 Search..." oninput="updateDisplay()">
-            <select id="filterBuilding" onchange="updateDisplay()"><option value="">All Buildings</option></select>
-            <select id="filterProduction" multiple onchange="updateDisplay()" size="1">
-</select>
+            <select id="filterBuilding" onchange="onBuildingFilterChange()"><option value="">All Buildings</option></select>
+            <select id="filterProduction" multiple onchange="updateDisplay()" size="1"></select>
             <select id="filterMonth" onchange="updateDisplay()"><option value="">All Months</option></select>
             <select id="filterYear" onchange="updateDisplay()"><option value="">All Years</option></select>
             
