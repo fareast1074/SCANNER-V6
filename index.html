@@ -149,55 +149,61 @@
 
     <div id="qcModal" tabindex="0">
         <div class="modal-content">
-            <h2 style="color:var(--primary); margin-top:0; text-align:center; font-size: 1.2em;">VERIFICATION</h2>
-            <div id="modalDataBox" class="modal-data-box"></div>
-            <div class="audit-grid">
-                <div class="audit-row"><label>Location</label>
-                    <div class="option-group">
-                        <button class="option-btn" id="btnLocCorrect" onclick="setToggle('Loc', 'CORRECT')">CORRECT</button>
-                        <button class="option-btn" id="btnLocWrong" onclick="setToggle('Loc', 'WRONG')">WRONG</button>
+            <div class="modal-header">
+                <h2 id="qcModalTitle">VERIFICATION</h2>
+                <button type="button" class="modal-close-x" onclick="closeModal()" aria-label="Close verification">&times;</button>
+            </div>
+
+            <div class="modal-scroll-body">
+                <div id="modalDataBox" class="modal-data-box"></div>
+                <div class="audit-grid">
+                    <div class="audit-row"><label>Location</label>
+                        <div class="option-group">
+                            <button class="option-btn" id="btnLocCorrect" onclick="setToggle('Loc', 'CORRECT')">CORRECT</button>
+                            <button class="option-btn" id="btnLocWrong" onclick="setToggle('Loc', 'WRONG')">WRONG</button>
+                        </div>
                     </div>
-                </div>
-                <div class="audit-row"><label>Due Date</label>
-                    <div class="option-group">
-                        <button class="option-btn" id="btnDueValid" onclick="setToggle('Due', 'VALID')">VALID</button>
-                        <button class="option-btn" id="btnDueExpired" onclick="setToggle('Due', 'EXPIRED')">EXPIRED</button>
+                    <div class="audit-row"><label>Due Date</label>
+                        <div class="option-group">
+                            <button class="option-btn" id="btnDueValid" onclick="setToggle('Due', 'VALID')">VALID</button>
+                            <button class="option-btn" id="btnDueExpired" onclick="setToggle('Due', 'EXPIRED')">EXPIRED</button>
+                        </div>
                     </div>
-                </div>
-                <div class="audit-row"><label>MSA Sticker</label>
-                    <div class="option-group">
-                        <button id="btnMsaYes" onclick="setToggle('Msa', 'YES')" class="option-btn">YES</button>
-                        <button id="btnMsaNo" onclick="setToggle('Msa', 'NO')" class="option-btn">NO</button>
+                    <div class="audit-row"><label>MSA Sticker</label>
+                        <div class="option-group">
+                            <button id="btnMsaYes" onclick="setToggle('Msa', 'YES')" class="option-btn">YES</button>
+                            <button id="btnMsaNo" onclick="setToggle('Msa', 'NO')" class="option-btn">NO</button>
+                        </div>
                     </div>
                 </div>
 
-            </div>
-            <div style="margin-top: 15px;">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span style="color:var(--text-muted); font-size:12px;">Remarks:</span>
-                    <span onclick="document.getElementById('qcRemark').value=''" 
-                          style="color:var(--danger); font-size:10px; cursor:pointer; text-decoration: underline;">
-                          Clear Entry
-                    </span>
+                <div style="margin-top: 15px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="color:var(--text-muted); font-size:12px;">Remarks:</span>
+                        <span onclick="document.getElementById('qcRemark').value=''" 
+                              style="color:var(--danger); font-size:10px; cursor:pointer; text-decoration: underline;">
+                              Clear Entry
+                        </span>
+                    </div>
+                    <input type="text" id="qcRemark" list="remarkOptions" placeholder="Select an option or type manually..." 
+                           style="width: 100%; padding: 10px; margin-top: 5px; border-radius: 5px; border: 1px solid var(--border-color); box-sizing: border-box;">
+                    <datalist id="remarkOptions">
+                        <option value="Missing due date sticker">
+                        <option value="Damaged Label">
+                        <option value="Found from missing">
+                        <option value="System not tally">
+                        <option value="Location not match">
+                        <option value="Wrong due date">
+                    </datalist>
                 </div>
-                <input type="text" id="qcRemark" list="remarkOptions" placeholder="Select an option or type manually..." 
-                       style="width: 100%; padding: 10px; margin-top: 5px; border-radius: 5px; border: 1px solid var(--border-color); box-sizing: border-box;">
-                <datalist id="remarkOptions">
-                    <option value="Missing due date sticker">
-                    <option value="Damaged Label">
-                    <option value="Found from missing">
-                    <option value="System not tally">
-                    <option value="Location not match">
-                    <option value="Wrong due date">
-                     
-                </datalist>
             </div>
-            <div style="display: flex; gap: 10px; margin-top: 20px;">
-                <button class="btn-save" style="flex: 2; cursor: pointer;" onclick="submitQC()">
+
+            <div class="modal-action-bar">
+                <button id="btnSubmitQC" class="btn-save" style="flex: 2; cursor: pointer;" onclick="submitQC()">
                     SAVE AUDIT RECORD
                 </button>
                 <button onclick="closeModal()" class="btn-cancel" style="flex: 1; cursor: pointer;">
-                    Cancel
+                    CLOSE
                 </button>
             </div>
         </div>
