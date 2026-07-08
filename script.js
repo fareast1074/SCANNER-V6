@@ -11,6 +11,9 @@ let pendingUploads = JSON.parse(localStorage.getItem('pending_queue')) || [];
 let activeLocks = {};
 
 let currentItem = null;
+let currentAuditEditId = null;
+let currentAuditEditRecord = null;
+let currentLockOwned = false;
 let loggedInUser = "";
 let html5QrCode = null;
 let currentGaugeValue = 0;
@@ -77,8 +80,17 @@ async function processOfflineQueue() {
 
 // --- REAL-TIME LISTENERS ---
 db.ref('audit_history').on('value', (snapshot) => {
-    const data = snapshot.val();
-    scanHistory = data ? Object.values(data).sort((a, b) => b.id - a.id) : [];
+    const rows = [];
+
+    snapshot.forEach(child => {
+        const value = child.val() || {};
+        rows.push({
+            ...value,
+            cloudId: value.cloudId || child.key
+        });
+    });
+
+    scanHistory = rows.sort((a, b) => (b.id || 0) - (a.id || 0));
     updateDisplay();
 });
 
@@ -423,8 +435,13 @@ function updateDisplay() {
                     <td><span class="status-pill ${i.dueRes === 'VALID' ? 'pill-pass' : 'pill-fail'}">${i.dueRes}</span></td>
                     <td>${originalStatus}</td>
                     <td><span class="status-pill ${i.msaRes === 'YES' ? 'pill-pass' : 'pill-fail'}">${i.msaRes}</span></td>
-                    <td>${i.remark}</td>
-                    <td><button class="btn-delete-row" onclick="deleteRow('${i.cloudId || ''}')">Del</button></td>
+                    <td>${escapeHtml(i.remark)}</td>
+                    <td>
+                        <div class="row-action-group">
+                            <button class="btn-detail-row" onclick="openAuditDetail('${encodeActionValue(i.cloudId || i.id || i.barcode || '')}')">Detail</button>
+                            <button class="btn-delete-row" onclick="deleteRow('${encodeActionValue(i.cloudId || i.id || i.barcode || '')}')">Del</button>
+                        </div>
+                    </td>
                 </tr>`;
             })
             .join('');
@@ -704,11 +721,446 @@ function animateGauge() {
     }
 }
 
+
+function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, char => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    }[char]));
+}
+
+function encodeActionValue(value) {
+    return encodeURIComponent(String(value ?? ""));
+}
+
+function decodeActionValue(value) {
+    try {
+        return decodeURIComponent(String(value ?? ""));
+    } catch (error) {
+        return String(value ?? "");
+    }
+}
+
+function findAuditRecordByKey(encodedKey) {
+    const key = decodeActionValue(encodedKey);
+    const keyUpper = key.toUpperCase();
+
+    return scanHistory.find(record => {
+        const recordCloudId = String(record.cloudId || "");
+        const recordId = String(record.id || "");
+        const recordBarcode = String(record.barcode || "").toUpperCase();
+
+        return recordCloudId === key ||
+               recordId === key ||
+               recordBarcode === keyUpper;
+    });
+}
+
+function setModalMode(isEditMode) {
+    const titleEl = document.getElementById('qcModalTitle');
+    const saveButton = document.getElementById('btnSubmitQC');
+
+    if (titleEl) {
+        titleEl.textContent = isEditMode ? 'SCANNED ITEM DETAIL' : 'VERIFICATION';
+    }
+
+    if (saveButton) {
+        saveButton.textContent = isEditMode ? 'UPDATE AUDIT RECORD' : 'SAVE AUDIT RECORD';
+    }
+}
+
+function buildCurrentItemFromAudit(auditRecord) {
+    const barcode = auditRecord?.barcode || "";
+    const lookupCode = barcode.toUpperCase();
+    const isUrl = barcode.toLowerCase().startsWith('http');
+    const masterInfo = masterDB[lookupCode];
+
+    const data = masterInfo || {
+        name: auditRecord?.name || (isUrl ? "EXTERNAL URL" : "UNREGISTERED"),
+        loc: auditRecord?.updatedLocation || "N/A",
+        due: auditRecord?.updatedDue || "N/A",
+        status: "N/A",
+        msa: "N/A"
+    };
+
+    return {
+        barcode,
+        ...data,
+        isUnregistered: !masterInfo
+    };
+}
+
+function renderQCModal(auditRecord = null) {
+    const modalDataBox = document.getElementById('modalDataBox');
+    const remarkEl = document.getElementById('qcRemark');
+    const isEditMode = !!auditRecord;
+
+    setModalMode(isEditMode);
+
+    if (modalDataBox && currentItem) {
+        const safeCode = escapeHtml(currentItem.barcode);
+        const safeName = escapeHtml(currentItem.name);
+        const safeLoc = escapeHtml(currentItem.loc);
+        const safeDue = escapeHtml(currentItem.due);
+        const safeStatus = escapeHtml(currentItem.status || "N/A");
+        const safeMsa = escapeHtml(currentItem.msa || "N/A");
+        const editDisabled = currentItem.isUnregistered ? "disabled" : "";
+        const editTitle = currentItem.isUnregistered
+            ? "Unregistered items cannot overwrite the master database."
+            : "Press EDIT, change the value, press OK, then SAVE AUDIT RECORD to update Firebase master_list.";
+        const detailMeta = isEditMode ? `
+            <div class="scan-detail-meta">
+                <div><span>Scanned Time</span><strong>${escapeHtml(auditRecord.time || "-")}</strong></div>
+                <div><span>Scanned By</span><strong>${escapeHtml(auditRecord.pic || "-")}</strong></div>
+                <div><span>Status</span><strong>${escapeHtml(auditRecord.isFail ? "FAIL" : "PASS")}</strong></div>
+                <div><span>Equipment Status</span><strong>${safeStatus}</strong></div>
+            </div>
+        ` : "";
+
+        modalDataBox.innerHTML = `
+            <div style="word-break: break-all; margin-bottom:10px;">
+                <span style="color:var(--text-muted); font-size:12px;">Scanned Content:</span><br>
+                <span style="color:var(--primary); font-weight:bold;">${safeCode}</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; margin:4px 0; gap:12px;">
+                <span style="color:var(--text-muted)">Equipment Name:</span>
+                <span style="color:var(--primary); font-weight:bold; text-align:right;">${safeName}</span>
+            </div>
+            ${detailMeta}
+            <div style="border-top: 1px solid var(--border-color); margin: 8px 0; padding-top: 8px;"></div>
+
+            <div class="master-edit-row">
+                <span style="color:var(--text-muted)">Reg. Location:</span>
+                <div class="master-edit-control">
+                    <span id="qcLocationDisplay" class="master-edit-value">${safeLoc}</span>
+                    <input type="text" id="qcLocationInput" class="master-edit-input" value="${safeLoc}" data-original-value="${safeLoc}"
+                           onkeydown="if(event.key === 'Enter'){ toggleMasterFieldEdit('loc'); }" ${editDisabled}>
+                    <button type="button" id="btnEditLocation" class="btn-inline-edit" onclick="toggleMasterFieldEdit('loc')" title="${editTitle}" ${editDisabled}>EDIT</button>
+                </div>
+            </div>
+
+            <div class="master-edit-row">
+                <span style="color:var(--text-muted)">Reg. Due:</span>
+                <div class="master-edit-control">
+                    <span id="qcDueDisplay" class="master-edit-value">${safeDue}</span>
+                    <input type="text" id="qcDueInput" class="master-edit-input" value="${safeDue}" data-original-value="${safeDue}"
+                           placeholder="APR-27 or 04/2027"
+                           onkeydown="if(event.key === 'Enter'){ toggleMasterFieldEdit('due'); }" ${editDisabled}>
+                    <button type="button" id="btnEditDue" class="btn-inline-edit" onclick="toggleMasterFieldEdit('due')" title="${editTitle}" ${editDisabled}>EDIT</button>
+                </div>
+            </div>
+
+            <div class="master-edit-row">
+                <span style="color:var(--text-muted)">Registered MSA:</span>
+                <div class="master-edit-control">
+                    <span class="master-edit-value">${safeMsa}</span>
+                </div>
+            </div>
+
+           
+        `;
+    }
+
+    if (remarkEl) {
+        const existingRemark = auditRecord ? (auditRecord.remark || "") : "";
+        remarkEl.value = existingRemark === "-" ? "" : existingRemark;
+    }
+
+    setToggle('Loc', auditRecord ? (auditRecord.locRes || 'CORRECT') : (currentItem?.isUnregistered ? 'WRONG' : 'CORRECT'));
+    setToggle('Due', auditRecord ? (auditRecord.dueRes || 'VALID') : (currentItem?.isUnregistered ? 'EXPIRED' : 'VALID'));
+    setToggle('Msa', auditRecord ? (auditRecord.msaRes || 'NO') : (currentItem?.isUnregistered ? 'NO' : 'YES'));
+
+    const modal = document.getElementById('qcModal');
+    if (modal) modal.style.display = 'flex';
+}
+
+async function openAuditDetail(encodedKey) {
+    const auditRecord = findAuditRecordByKey(encodedKey);
+
+    if (!auditRecord) {
+        alert("Audit record not found.");
+        return;
+    }
+
+    currentAuditEditId = auditRecord.cloudId || String(auditRecord.id || auditRecord.barcode || "");
+    currentAuditEditRecord = auditRecord;
+    currentLockOwned = false;
+    currentItem = buildCurrentItemFromAudit(auditRecord);
+
+    renderQCModal(auditRecord);
+}
+
+function parseLocationParts(locationValue) {
+    const safeLocation = (locationValue || "").trim() || "N/A";
+    const locParts = safeLocation.split("-");
+
+    return {
+        loc: safeLocation,
+        bldg: (locParts[0] || "N/A").trim(),
+        prod: (locParts[1] || "N/A").trim()
+    };
+}
+
+function getMonthNameFromValue(value) {
+    const cleaned = String(value || "").trim().toUpperCase();
+    const monthNumber = parseInt(cleaned, 10);
+
+    if (!Number.isNaN(monthNumber) && monthNumber >= 1 && monthNumber <= 12) {
+        return MONTH_ORDER[monthNumber - 1];
+    }
+
+    const threeLetterMonth = cleaned.slice(0, 3);
+    return MONTH_ORDER.includes(threeLetterMonth) ? threeLetterMonth : cleaned;
+}
+
+function normalizeYearValue(yearValue) {
+    const cleaned = String(yearValue || "").trim();
+
+    if (!cleaned) return "N/A";
+    if (cleaned.length === 2 && /^\d{2}$/.test(cleaned)) return "20" + cleaned;
+
+    return cleaned;
+}
+
+function buildDisplayDue(monthValue, yearValue) {
+    const safeMonth = monthValue || "N/A";
+    const safeYear = yearValue || "N/A";
+
+    if (safeMonth === "N/A" || safeYear === "N/A") return "N/A";
+
+    return `${safeMonth}-${safeYear.slice(-2)}`;
+}
+
+function parseDueParts(dueValue) {
+    const cleanedDue = String(dueValue ?? "").trim().toUpperCase();
+
+    if (!cleanedDue) return null;
+    if (cleanedDue === "N/A") {
+        return {
+            due: "N/A",
+            month: "N/A",
+            year: "N/A"
+        };
+    }
+
+    let month = "N/A";
+    let year = "N/A";
+    let displayDue = cleanedDue;
+
+    if (cleanedDue.includes("/")) {
+        const parts = cleanedDue.split("/").map(part => part.trim()).filter(Boolean);
+        month = getMonthNameFromValue(parts[0]);
+        year = normalizeYearValue(parts.length >= 3 ? parts[2] : parts[1]);
+        displayDue = buildDisplayDue(month, year);
+    } else if (cleanedDue.includes("-")) {
+        const parts = cleanedDue.split("-").map(part => part.trim());
+        month = getMonthNameFromValue(parts[0]);
+        year = normalizeYearValue(parts[1]);
+        displayDue = buildDisplayDue(month, year);
+    }
+
+    return {
+        due: displayDue,
+        month,
+        year
+    };
+}
+
+function updateRawMasterFields(lookupCode, newLocation, newDue) {
+    const rowIndex = rawMasterRows.findIndex((row, index) => {
+        return index > 0 && ((row[0] || "").toUpperCase() === lookupCode);
+    });
+
+    if (rowIndex === -1) return;
+
+    while (rawMasterRows[rowIndex].length < 6) {
+        rawMasterRows[rowIndex].push("");
+    }
+
+    if (newLocation !== null && newLocation !== undefined) {
+        rawMasterRows[rowIndex][2] = newLocation;
+    }
+
+    if (newDue !== null && newDue !== undefined) {
+        rawMasterRows[rowIndex][3] = newDue;
+    }
+}
+
+function toggleMasterFieldEdit(field) {
+    if (!currentItem) return;
+
+    if (currentItem.isUnregistered) {
+        alert("Unregistered items cannot overwrite the master database.");
+        return;
+    }
+
+    const fields = {
+        loc: {
+            inputId: 'qcLocationInput',
+            displayId: 'qcLocationDisplay',
+            buttonId: 'btnEditLocation',
+            emptyMessage: 'Location cannot be blank.',
+            auditToggle: () => setToggle('Loc', 'WRONG')
+        },
+        due: {
+            inputId: 'qcDueInput',
+            displayId: 'qcDueDisplay',
+            buttonId: 'btnEditDue',
+            emptyMessage: 'Due date cannot be blank.'
+        }
+    };
+
+    const config = fields[field];
+    if (!config) return;
+
+    const inputEl = document.getElementById(config.inputId);
+    const displayEl = document.getElementById(config.displayId);
+    const buttonEl = document.getElementById(config.buttonId);
+
+    if (!inputEl || !displayEl || !buttonEl) return;
+
+    const isEditing = inputEl.style.display === 'block';
+
+    if (!isEditing) {
+        displayEl.style.display = 'none';
+        inputEl.style.display = 'block';
+        buttonEl.innerText = 'OK';
+        buttonEl.classList.add('active');
+        inputEl.focus();
+        inputEl.select();
+        return;
+    }
+
+    const rawValue = inputEl.value.trim();
+
+    if (!rawValue) {
+        alert(config.emptyMessage);
+        inputEl.focus();
+        return;
+    }
+
+    let displayValue = rawValue;
+
+    if (field === 'due') {
+        const dueParts = parseDueParts(rawValue);
+
+        if (!dueParts || !dueParts.due) {
+            alert('Due date cannot be blank.');
+            inputEl.focus();
+            return;
+        }
+
+        displayValue = dueParts.due;
+        inputEl.value = displayValue;
+    }
+
+    displayEl.textContent = displayValue;
+    displayEl.style.display = 'inline';
+    inputEl.style.display = 'none';
+    buttonEl.innerText = 'EDIT';
+    buttonEl.classList.remove('active');
+
+    if (config.auditToggle && displayValue !== (inputEl.dataset.originalValue || "")) {
+        config.auditToggle();
+    }
+}
+
+async function overwriteMasterFieldsIfChanged(newLocation, newDueValue) {
+    const result = {
+        locationUpdated: false,
+        dueUpdated: false
+    };
+
+    if (!currentItem || currentItem.isUnregistered) return result;
+
+    const lookupCode = (currentItem.barcode || "").toUpperCase();
+    const currentMaster = masterDB[lookupCode];
+
+    if (!currentMaster) return result;
+
+    const cleanedLocation = (newLocation || "").trim();
+    const cleanedDue = (newDueValue || "").trim();
+
+    if (!cleanedLocation) {
+        alert("Location cannot be blank.");
+        return null;
+    }
+
+    if (!cleanedDue) {
+        alert("Due date cannot be blank.");
+        return null;
+    }
+
+    const locationParts = parseLocationParts(cleanedLocation);
+    const dueParts = parseDueParts(cleanedDue);
+
+    if (!dueParts) {
+        alert("Due date cannot be blank.");
+        return null;
+    }
+
+    const locationChanged = locationParts.loc !== (currentMaster.loc || "");
+    const dueChanged = dueParts.due !== (currentMaster.due || "");
+
+    if (!locationChanged && !dueChanged) return result;
+
+    if (!isOnline) {
+        alert("Cannot overwrite the master database while offline. Please reconnect and save again.");
+        return null;
+    }
+
+    const updatedMaster = {
+        ...currentMaster
+    };
+
+    if (locationChanged) {
+        updatedMaster.loc = locationParts.loc;
+        updatedMaster.bldg = locationParts.bldg;
+        updatedMaster.prod = locationParts.prod;
+        result.locationUpdated = true;
+    }
+
+    if (dueChanged) {
+        updatedMaster.due = dueParts.due;
+        updatedMaster.month = dueParts.month;
+        updatedMaster.year = dueParts.year;
+        result.dueUpdated = true;
+    }
+
+    masterDB[lookupCode] = updatedMaster;
+    updateRawMasterFields(
+        lookupCode,
+        locationChanged ? locationParts.loc : null,
+        dueChanged ? dueParts.due : null
+    );
+
+    await db.ref('master_list').set({
+        masterDB,
+        rawMasterRows
+    });
+
+    currentItem = {
+        ...currentItem,
+        ...updatedMaster
+    };
+
+    rebuildFilters();
+    updateDisplay();
+
+    return result;
+}
 async function handleScannedCode(barcode) {
     if (!barcode) return;
 
-    const cleanCode = barcode.trim().replace(/[\r\n]/g, ""); 
+    const cleanCode = barcode.trim().replace(/[\r\n]/g, "");
     const lookupCode = cleanCode.toUpperCase();
+
+    currentAuditEditId = null;
+    currentAuditEditRecord = null;
+    currentLockOwned = false;
 
     const existing = scanHistory.find(item => {
         return (item.barcode || "").toUpperCase() === lookupCode;
@@ -719,14 +1171,15 @@ async function handleScannedCode(barcode) {
         const pTime = document.getElementById('prevTime');
         const banner = document.getElementById('alertBanner');
 
-        if (pPic) pPic.innerText = existing.pic;
-        if (pTime) pTime.innerText = existing.time;
+        if (pPic) pPic.innerText = existing.pic || "-";
+        if (pTime) pTime.innerText = existing.time || "-";
 
         if (banner) {
             banner.classList.add('show');
             setTimeout(() => banner.classList.remove('show'), 4000);
         }
 
+        openAuditDetail(encodeActionValue(existing.cloudId || existing.id || existing.barcode || ""));
         return;
     }
 
@@ -739,7 +1192,14 @@ async function handleScannedCode(barcode) {
             return;
         }
 
-        await attemptLock(cleanCode);
+        const lockResult = await attemptLock(cleanCode);
+
+        if (lockResult && lockResult.committed === false) {
+            alert("This item is currently being audited by another user.");
+            return;
+        }
+
+        currentLockOwned = true;
     }
 
     const isUrl = cleanCode.toLowerCase().startsWith('http');
@@ -759,38 +1219,8 @@ async function handleScannedCode(barcode) {
         isUnregistered: !masterInfo
     };
 
-    const modalDataBox = document.getElementById('modalDataBox');
-
-    if (modalDataBox) {
-        modalDataBox.innerHTML = `
-            <div style="word-break: break-all; margin-bottom:10px;">
-                <span style="color:var(--text-muted); font-size:12px;">Scanned Content:</span><br>
-                <span style="color:var(--primary); font-weight:bold;">${cleanCode}</span>
-            </div>
-            <div style="display:flex; justify-content:space-between; margin:4px 0;">
-                <span style="color:var(--text-muted)">Equipment Name:</span>
-                <span style="color:var(--primary); font-weight:bold;">${currentItem.name}</span>
-            </div>
-            <div style="border-top: 1px solid var(--border-color); margin: 8px 0; padding-top: 8px;"></div>
-            <div style="display:flex; justify-content:space-between; margin:2px 0;">
-                <span style="color:var(--text-muted)">Reg. Location:</span>
-                <span style="color:var(--primary);">${currentItem.loc}</span>
-            </div>
-            <div style="display:flex; justify-content:space-between; margin:2px 0;">
-                <span style="color:var(--text-muted)">Reg. Due:</span>
-                <span style="color:var(--primary);">${currentItem.due}</span>
-            </div>
-        `;
-    }
-
-    setToggle('Loc', masterInfo ? 'CORRECT' : 'WRONG'); 
-    setToggle('Due', masterInfo ? 'VALID' : 'EXPIRED'); 
-    setToggle('Msa', masterInfo ? 'YES' : 'NO');
-
-    const modal = document.getElementById('qcModal');
-    if (modal) modal.style.display = 'flex';
+    renderQCModal(null);
 }
-
 function setToggle(type, val) {
     if (type === 'Loc') {
         selectedLoc = val;
@@ -821,17 +1251,88 @@ function setToggle(type, val) {
     }
 }
 
+function auditRecordsMatch(a, b) {
+    if (!a || !b) return false;
+
+    const aCloud = String(a.cloudId || "");
+    const bCloud = String(b.cloudId || "");
+
+    if (aCloud && bCloud && aCloud === bCloud) return true;
+
+    const aId = String(a.id || "");
+    const bId = String(b.id || "");
+
+    if (aId && bId && aId === bId) return true;
+
+    const aBarcode = String(a.barcode || "").toUpperCase();
+    const bBarcode = String(b.barcode || "").toUpperCase();
+
+    return !!aBarcode && aBarcode === bBarcode;
+}
+
+function updateLocalAuditRecord(updatedRecord) {
+    scanHistory = scanHistory.map(record => {
+        return auditRecordsMatch(record, updatedRecord) ? { ...record, ...updatedRecord } : record;
+    });
+
+    pendingUploads = pendingUploads.map(record => {
+        return auditRecordsMatch(record, updatedRecord) ? { ...record, ...updatedRecord } : record;
+    });
+
+    localStorage.setItem('pending_queue', JSON.stringify(pendingUploads));
+    updateDisplay();
+}
+
+async function saveEditedAuditRecord(updatedRecord) {
+    if (isOnline && updatedRecord.cloudId) {
+        await db.ref('audit_history/' + updatedRecord.cloudId).update(updatedRecord);
+        return;
+    }
+
+    updateLocalAuditRecord(updatedRecord);
+}
+
 // SUBMIT QC: Logic for Date + Time + Failure Rules
-function submitQC() {
+async function submitQC() {
     if (!currentItem) return;
 
     const remarkEl = document.getElementById('qcRemark');
+    const locationEl = document.getElementById('qcLocationInput');
+    const dueEl = document.getElementById('qcDueInput');
     const remarkValue = remarkEl ? remarkEl.value.trim() : "";
+    const editedLocation = locationEl ? locationEl.value.trim() : currentItem.loc;
+    const editedDue = dueEl ? dueEl.value.trim() : currentItem.due;
+    const isEditMode = !!currentAuditEditRecord;
+    const existingRecord = currentAuditEditRecord || {};
+
+    const masterUpdateResult = await overwriteMasterFieldsIfChanged(editedLocation, editedDue);
+
+    if (masterUpdateResult === null) {
+        return;
+    }
+
+    const masterLocationUpdated = masterUpdateResult.locationUpdated;
+    const masterDueUpdated = masterUpdateResult.dueUpdated;
+    const savedMasterLocationUpdated = Boolean(existingRecord.masterLocationUpdated || masterLocationUpdated);
+    const savedMasterDueUpdated = Boolean(existingRecord.masterDueUpdated || masterDueUpdated);
+
+    if (masterLocationUpdated) {
+        selectedLoc = "WRONG";
+    }
+
+    const updateRemarks = [];
+
+    if (savedMasterLocationUpdated) updateRemarks.push("Location overwritten in master database");
+    if (savedMasterDueUpdated) updateRemarks.push("Due date overwritten in master database");
+
+    const finalRemark = remarkValue || (updateRemarks.length ? updateRemarks.join("; ") : "-");
 
     const failed =
         selectedLoc === "WRONG" ||
         selectedDue === "EXPIRED" ||
         currentItem.isUnregistered ||
+        savedMasterLocationUpdated ||
+        savedMasterDueUpdated ||
         remarkValue.length > 0;
 
     const now = new Date();
@@ -845,23 +1346,40 @@ function submitQC() {
         });
 
     const auditData = {
-        id: Date.now(),
-        time: dateTimeStr,
-        barcode: currentItem.barcode,
+        id: isEditMode ? (existingRecord.id || Date.now()) : Date.now(),
+        time: isEditMode ? (existingRecord.time || dateTimeStr) : dateTimeStr,
+        barcode: isEditMode ? (existingRecord.barcode || currentItem.barcode) : currentItem.barcode,
         name: currentItem.name,
-        pic: loggedInUser,
+        pic: isEditMode ? (existingRecord.pic || loggedInUser) : loggedInUser,
         locRes: selectedLoc,
         dueRes: selectedDue,
         msaRes: selectedMsa,
-        remark: remarkValue || "-",
+        updatedLocation: currentItem.loc,
+        updatedDue: currentItem.due,
+        masterLocationUpdated: savedMasterLocationUpdated,
+        masterDueUpdated: savedMasterDueUpdated,
+        remark: finalRemark,
         isFail: failed,
         isUnregistered: currentItem.isUnregistered
     };
 
+    if (isEditMode) {
+        if (existingRecord.cloudId) {
+            auditData.cloudId = existingRecord.cloudId;
+        }
+
+        auditData.editedBy = loggedInUser;
+        auditData.editedAt = dateTimeStr;
+
+        await saveEditedAuditRecord(auditData);
+        closeModal();
+        return;
+    }
+
     if (isOnline) {
         const newRef = db.ref('audit_history').push();
         auditData.cloudId = newRef.key;
-        newRef.set(auditData);
+        await newRef.set(auditData);
     } else {
         pendingUploads.push(auditData);
         localStorage.setItem('pending_queue', JSON.stringify(pendingUploads));
@@ -871,9 +1389,8 @@ function submitQC() {
 
     closeModal();
 }
-
 function closeModal() {
-    if (currentItem) {
+    if (currentItem && currentLockOwned) {
         releaseLock(currentItem.barcode);
     }
 
@@ -884,6 +1401,10 @@ function closeModal() {
     if (remarkEl) remarkEl.value = "";
 
     currentItem = null;
+    currentAuditEditId = null;
+    currentAuditEditRecord = null;
+    currentLockOwned = false;
+    setModalMode(false);
 
     updateDisplay();
 
@@ -1081,11 +1602,22 @@ function exportToExcel() {
     XLSX.writeFile(wb, `Audit_Report_Full.xlsx`);
 }
 
-function deleteRow(cloudId) {
-    if (confirm("Remove from Cloud?")) {
-        if (cloudId) {
-            db.ref('audit_history/' + cloudId).remove();
-        }
+function deleteRow(encodedKey) {
+    const record = findAuditRecordByKey(encodedKey);
+    const cloudId = record?.cloudId || decodeActionValue(encodedKey);
+
+    if (!confirm("Remove this audit record?")) return;
+
+    if (cloudId && isOnline) {
+        db.ref('audit_history/' + cloudId).remove();
+        return;
+    }
+
+    if (record) {
+        scanHistory = scanHistory.filter(item => !auditRecordsMatch(item, record));
+        pendingUploads = pendingUploads.filter(item => !auditRecordsMatch(item, record));
+        localStorage.setItem('pending_queue', JSON.stringify(pendingUploads));
+        updateDisplay();
     }
 }
 
