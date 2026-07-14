@@ -1,0 +1,18 @@
+{
+  "name": "GRID V2.1 Calibration Inventory System",
+  "short_name": "GRID V2.1",
+  "description": "Scanner-first calibration inventory auditing with Firebase Realtime Database.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f7f3ed",
+  "theme_color": "#5d4037",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">GRID V2</title>
+  <desc id="desc">Calibration inventory scanner icon</desc>
+  <rect width="512" height="512" rx="112" fill="#5d4037"/>
+  <rect x="82" y="82" width="348" height="348" rx="58" fill="#f7f3ed"/>
+  <path d="M135 172v-37h37M340 135h37v37M377 340v37h-37M172 377h-37v-37" fill="none" stroke="#5d4037" stroke-width="28" stroke-linecap="round"/>
+  <g fill="#5d4037">
+    <rect x="153" y="208" width="22" height="96" rx="7"/>
+    <rect x="187" y="187" width="14" height="138" rx="5"/>
+    <rect x="213" y="199" width="30" height="114" rx="7"/>
+    <rect x="255" y="187" width="14" height="138" rx="5"/>
+    <rect x="281" y="201" width="20" height="110" rx="6"/>
+    <rect x="313" y="187" width="38" height="138" rx="8"/>
+  </g>
+  <circle cx="378" cy="378" r="63" fill="#2e7d32"/>
+  <path d="m346 378 20 20 43-47" fill="none" stroke="#fff" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
