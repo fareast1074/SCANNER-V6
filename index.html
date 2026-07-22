@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#5d4037">
     <meta name="description" content="Scanner-first calibration inventory audit system">
-    <title>GRID V2.1 | Calibration Inventory System</title>
+    <title>GRID V2.2 | Calibration Inventory System</title>
     <link rel="manifest" href="manifest.json">
     <link rel="icon" href="icon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="style.css">
@@ -28,7 +28,7 @@
     <div id="loginOverlay">
         <div class="login-card">
             <div class="scanner-line"></div>
-            <div class="login-kicker">GRID V2.0 | Dev by F4REAST </div>
+            <div class="login-kicker">GRID V2.2 | Dev by F4REAST </div>
             <div class="glitch-title">INVENTORY SYSTEM</div>
             <label class="sr-only" for="username">Name</label>
             <input type="text" id="username" placeholder="Name" autocomplete="username">
@@ -328,7 +328,7 @@
                 <table>
                     <thead>
                         <tr>
-                            <th>Time</th><th>Code</th><th>Name</th><th>PIC</th><th>Location</th><th>Due</th><th>Status</th><th>MSA</th><th>Remark</th><th>Action</th>
+                            <th>Time</th><th>Code</th><th>Name</th><th>PIC</th><th>Physical Loc.</th><th>Sticker Loc.</th><th>Due</th><th>Status</th><th>MSA</th><th>Remark</th><th>Action</th>
                         </tr>
                     </thead>
                     <tbody id="inventoryBody"></tbody>
@@ -369,18 +369,29 @@
                 <div id="modalDataBox" class="modal-data-box"></div>
 
                 <div id="verificationProgress" class="verification-progress" aria-live="polite">
-                    Complete all verification checks to save.
+                    Complete all four verification checks to save.
                 </div>
 
                 <div class="audit-grid">
                     <div class="audit-row">
                         <div class="audit-label-wrap">
-                            <label>Location</label>
-                            <small>Does the observed location match?</small>
+                            <label>Physical Location</label>
+                            <small>Is the equipment at its registered location?</small>
                         </div>
                         <div class="option-group">
                             <button class="option-btn" id="btnLocCorrect" onclick="setToggle('Loc', 'CORRECT')">Correct</button>
                             <button class="option-btn" id="btnLocWrong" onclick="setToggle('Loc', 'WRONG')">Wrong</button>
+                        </div>
+                    </div>
+
+                    <div class="audit-row">
+                        <div class="audit-label-wrap">
+                            <label>Location on Sticker</label>
+                            <small>Does the location printed on the sticker match the registered location?</small>
+                        </div>
+                        <div class="option-group">
+                            <button class="option-btn" id="btnStickerLocCorrect" onclick="setToggle('StickerLoc', 'CORRECT')">Correct</button>
+                            <button class="option-btn" id="btnStickerLocWrong" onclick="setToggle('StickerLoc', 'WRONG')">Wrong</button>
                         </div>
                     </div>
 
@@ -422,6 +433,7 @@
                         <option value="Found from missing"></option>
                         <option value="System not tally"></option>
                         <option value="Location not match"></option>
+                        <option value="Location on sticker not match"></option>
                         <option value="Wrong due date"></option>
                         <option value="MSA sticker missing"></option>
                     </datalist>

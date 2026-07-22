@@ -1017,7 +1017,7 @@ button:disabled {
 
 .table-container table {
     width: 100%;
-    min-width: 1000px;
+    min-width: 1120px;
     border-collapse: collapse;
     color: var(--text-main);
     font-size: 0.79rem;
@@ -1301,7 +1301,7 @@ tbody tr:hover {
 
 .registered-data-grid {
     display: grid;
-    grid-template-columns: 1.4fr 0.8fr 0.8fr;
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.75fr);
     gap: 7px;
 }
 

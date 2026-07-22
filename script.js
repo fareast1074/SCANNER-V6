@@ -21,6 +21,7 @@ let targetGaugeValue = 0;
 let isOnline = false;
 
 let selectedLoc = "CORRECT";
+let selectedStickerLoc = "CORRECT";
 let selectedDue = "VALID";
 let selectedMsa = "NO";
 
@@ -432,6 +433,7 @@ function updateDisplay() {
                     <td>${i.name}</td>
                     <td style="color:var(--primary)">${i.pic}</td>
                     <td><span class="status-pill ${i.locRes === 'CORRECT' ? 'pill-pass' : 'pill-fail'}">${i.locRes}</span></td>
+                    <td><span class="status-pill ${i.stickerLocRes === 'CORRECT' ? 'pill-pass' : (i.stickerLocRes === 'WRONG' ? 'pill-fail' : 'pill-neutral')}">${i.stickerLocRes || 'N/A'}</span></td>
                     <td><span class="status-pill ${i.dueRes === 'VALID' ? 'pill-pass' : 'pill-fail'}">${i.dueRes}</span></td>
                     <td>${originalStatus}</td>
                     <td><span class="status-pill ${i.msaRes === 'YES' ? 'pill-pass' : 'pill-fail'}">${i.msaRes}</span></td>
@@ -502,6 +504,7 @@ function exportFilteredOnly() {
         "Date/Time",
         "Auditor",
         "Loc_Audit",
+        "Sticker_Loc_Audit",
         "Due_Audit",
         "MSA_Audit",
         "Remark"
@@ -527,6 +530,7 @@ function exportFilteredOnly() {
                 s.time,
                 s.pic,
                 s.locRes,
+                s.stickerLocRes || "",
                 s.dueRes,
                 s.msaRes,
                 s.remark
@@ -535,6 +539,7 @@ function exportFilteredOnly() {
             auditData.push([
                 ...baseRow,
                 "PENDING",
+                "",
                 "",
                 "",
                 "",
@@ -582,6 +587,7 @@ function updateFailureChart(failedItems) {
         "Found from missing", 
         "System not tally", 
         "Location not match", 
+        "Location on sticker not match",
         "Wrong due date"
     ];
 
@@ -782,7 +788,7 @@ function buildCurrentItemFromAudit(auditRecord) {
         name: auditRecord?.name || (isUrl ? "EXTERNAL URL" : "UNREGISTERED"),
         loc: auditRecord?.updatedLocation || "N/A",
         due: auditRecord?.updatedDue || "N/A",
-        status: "N/A",
+        status: auditRecord?.updatedStatus || "N/A",
         msa: "N/A"
     };
 
@@ -854,6 +860,25 @@ function renderQCModal(auditRecord = null) {
             </div>
 
             <div class="master-edit-row">
+                <span style="color:var(--text-muted)">Equipment Status:</span>
+                <div class="master-edit-control">
+                    <span id="qcStatusDisplay" class="master-edit-value">${safeStatus}</span>
+                    <input type="text" id="qcStatusInput" class="master-edit-input" value="${safeStatus}" data-original-value="${safeStatus}"
+                           list="qcStatusSuggestions" maxlength="60" autocapitalize="characters"
+                           onkeydown="if(event.key === 'Enter'){ toggleMasterFieldEdit('status'); }" ${editDisabled}>
+                    <button type="button" id="btnEditStatus" class="btn-inline-edit" onclick="toggleMasterFieldEdit('status')" title="${editTitle}" ${editDisabled}>EDIT</button>
+                    <datalist id="qcStatusSuggestions">
+                        <option value="ACTIVE"></option>
+                        <option value="INACTIVE"></option>
+                        <option value="UNDER REPAIR"></option>
+                        <option value="OUT OF SERVICE"></option>
+                        <option value="MISSING"></option>
+                        <option value="DISPOSED"></option>
+                    </datalist>
+                </div>
+            </div>
+
+            <div class="master-edit-row">
                 <span style="color:var(--text-muted)">Registered MSA:</span>
                 <div class="master-edit-control">
                     <span class="master-edit-value">${safeMsa}</span>
@@ -870,6 +895,7 @@ function renderQCModal(auditRecord = null) {
     }
 
     setToggle('Loc', auditRecord ? (auditRecord.locRes || 'CORRECT') : (currentItem?.isUnregistered ? 'WRONG' : 'CORRECT'));
+    setToggle('StickerLoc', auditRecord ? (auditRecord.stickerLocRes || 'CORRECT') : (currentItem?.isUnregistered ? 'WRONG' : 'CORRECT'));
     setToggle('Due', auditRecord ? (auditRecord.dueRes || 'VALID') : (currentItem?.isUnregistered ? 'EXPIRED' : 'VALID'));
     setToggle('Msa', auditRecord ? (auditRecord.msaRes || 'NO') : (currentItem?.isUnregistered ? 'NO' : 'YES'));
 
@@ -902,6 +928,13 @@ function parseLocationParts(locationValue) {
         bldg: (locParts[0] || "N/A").trim(),
         prod: (locParts[1] || "N/A").trim()
     };
+}
+
+function normalizeEquipmentStatus(statusValue) {
+    return String(statusValue || "")
+        .trim()
+        .replace(/\s+/g, " ")
+        .toUpperCase();
 }
 
 function getMonthNameFromValue(value) {
@@ -969,7 +1002,7 @@ function parseDueParts(dueValue) {
     };
 }
 
-function updateRawMasterFields(lookupCode, newLocation, newDue) {
+function updateRawMasterFields(lookupCode, newLocation, newDue, newStatus) {
     const rowIndex = rawMasterRows.findIndex((row, index) => {
         return index > 0 && ((row[0] || "").toUpperCase() === lookupCode);
     });
@@ -986,6 +1019,10 @@ function updateRawMasterFields(lookupCode, newLocation, newDue) {
 
     if (newDue !== null && newDue !== undefined) {
         rawMasterRows[rowIndex][3] = newDue;
+    }
+
+    if (newStatus !== null && newStatus !== undefined) {
+        rawMasterRows[rowIndex][4] = newStatus;
     }
 }
 
@@ -1010,6 +1047,12 @@ function toggleMasterFieldEdit(field) {
             displayId: 'qcDueDisplay',
             buttonId: 'btnEditDue',
             emptyMessage: 'Due date cannot be blank.'
+        },
+        status: {
+            inputId: 'qcStatusInput',
+            displayId: 'qcStatusDisplay',
+            buttonId: 'btnEditStatus',
+            emptyMessage: 'Equipment status cannot be blank.'
         }
     };
 
@@ -1055,6 +1098,9 @@ function toggleMasterFieldEdit(field) {
 
         displayValue = dueParts.due;
         inputEl.value = displayValue;
+    } else if (field === 'status') {
+        displayValue = normalizeEquipmentStatus(rawValue);
+        inputEl.value = displayValue;
     }
 
     displayEl.textContent = displayValue;
@@ -1068,10 +1114,11 @@ function toggleMasterFieldEdit(field) {
     }
 }
 
-async function overwriteMasterFieldsIfChanged(newLocation, newDueValue) {
+async function overwriteMasterFieldsIfChanged(newLocation, newDueValue, newStatusValue) {
     const result = {
         locationUpdated: false,
-        dueUpdated: false
+        dueUpdated: false,
+        statusUpdated: false
     };
 
     if (!currentItem || currentItem.isUnregistered) return result;
@@ -1083,6 +1130,7 @@ async function overwriteMasterFieldsIfChanged(newLocation, newDueValue) {
 
     const cleanedLocation = (newLocation || "").trim();
     const cleanedDue = (newDueValue || "").trim();
+    const cleanedStatus = normalizeEquipmentStatus(newStatusValue);
 
     if (!cleanedLocation) {
         alert("Location cannot be blank.");
@@ -1091,6 +1139,11 @@ async function overwriteMasterFieldsIfChanged(newLocation, newDueValue) {
 
     if (!cleanedDue) {
         alert("Due date cannot be blank.");
+        return null;
+    }
+
+    if (!cleanedStatus) {
+        alert("Equipment status cannot be blank.");
         return null;
     }
 
@@ -1104,8 +1157,9 @@ async function overwriteMasterFieldsIfChanged(newLocation, newDueValue) {
 
     const locationChanged = locationParts.loc !== (currentMaster.loc || "");
     const dueChanged = dueParts.due !== (currentMaster.due || "");
+    const statusChanged = cleanedStatus !== normalizeEquipmentStatus(currentMaster.status || "N/A");
 
-    if (!locationChanged && !dueChanged) return result;
+    if (!locationChanged && !dueChanged && !statusChanged) return result;
 
     if (!isOnline) {
         alert("Cannot overwrite the master database while offline. Please reconnect and save again.");
@@ -1130,11 +1184,17 @@ async function overwriteMasterFieldsIfChanged(newLocation, newDueValue) {
         result.dueUpdated = true;
     }
 
+    if (statusChanged) {
+        updatedMaster.status = cleanedStatus;
+        result.statusUpdated = true;
+    }
+
     masterDB[lookupCode] = updatedMaster;
     updateRawMasterFields(
         lookupCode,
         locationChanged ? locationParts.loc : null,
-        dueChanged ? dueParts.due : null
+        dueChanged ? dueParts.due : null,
+        statusChanged ? cleanedStatus : null
     );
 
     await db.ref('master_list').set({
@@ -1231,6 +1291,15 @@ function setToggle(type, val) {
         document.getElementById('btnLocWrong').className =
             val === 'WRONG' ? 'option-btn active-fail' : 'option-btn';
 
+    } else if (type === 'StickerLoc') {
+        selectedStickerLoc = val;
+
+        document.getElementById('btnStickerLocCorrect').className =
+            val === 'CORRECT' ? 'option-btn active-pass' : 'option-btn';
+
+        document.getElementById('btnStickerLocWrong').className =
+            val === 'WRONG' ? 'option-btn active-fail' : 'option-btn';
+
     } else if (type === 'Due') {
         selectedDue = val;
 
@@ -1299,13 +1368,15 @@ async function submitQC() {
     const remarkEl = document.getElementById('qcRemark');
     const locationEl = document.getElementById('qcLocationInput');
     const dueEl = document.getElementById('qcDueInput');
+    const statusEl = document.getElementById('qcStatusInput');
     const remarkValue = remarkEl ? remarkEl.value.trim() : "";
     const editedLocation = locationEl ? locationEl.value.trim() : currentItem.loc;
     const editedDue = dueEl ? dueEl.value.trim() : currentItem.due;
+    const editedStatus = statusEl ? statusEl.value.trim() : currentItem.status;
     const isEditMode = !!currentAuditEditRecord;
     const existingRecord = currentAuditEditRecord || {};
 
-    const masterUpdateResult = await overwriteMasterFieldsIfChanged(editedLocation, editedDue);
+    const masterUpdateResult = await overwriteMasterFieldsIfChanged(editedLocation, editedDue, editedStatus);
 
     if (masterUpdateResult === null) {
         return;
@@ -1313,8 +1384,10 @@ async function submitQC() {
 
     const masterLocationUpdated = masterUpdateResult.locationUpdated;
     const masterDueUpdated = masterUpdateResult.dueUpdated;
+    const masterStatusUpdated = masterUpdateResult.statusUpdated;
     const savedMasterLocationUpdated = Boolean(existingRecord.masterLocationUpdated || masterLocationUpdated);
     const savedMasterDueUpdated = Boolean(existingRecord.masterDueUpdated || masterDueUpdated);
+    const savedMasterStatusUpdated = Boolean(existingRecord.masterStatusUpdated || masterStatusUpdated);
 
     if (masterLocationUpdated) {
         selectedLoc = "WRONG";
@@ -1324,15 +1397,18 @@ async function submitQC() {
 
     if (savedMasterLocationUpdated) updateRemarks.push("Location overwritten in master database");
     if (savedMasterDueUpdated) updateRemarks.push("Due date overwritten in master database");
+    if (savedMasterStatusUpdated) updateRemarks.push("Equipment status overwritten in master database");
 
     const finalRemark = remarkValue || (updateRemarks.length ? updateRemarks.join("; ") : "-");
 
     const failed =
         selectedLoc === "WRONG" ||
+        selectedStickerLoc === "WRONG" ||
         selectedDue === "EXPIRED" ||
         currentItem.isUnregistered ||
         savedMasterLocationUpdated ||
         savedMasterDueUpdated ||
+        savedMasterStatusUpdated ||
         remarkValue.length > 0;
 
     const now = new Date();
@@ -1352,12 +1428,15 @@ async function submitQC() {
         name: currentItem.name,
         pic: isEditMode ? (existingRecord.pic || loggedInUser) : loggedInUser,
         locRes: selectedLoc,
+        stickerLocRes: selectedStickerLoc,
         dueRes: selectedDue,
         msaRes: selectedMsa,
         updatedLocation: currentItem.loc,
         updatedDue: currentItem.due,
+        updatedStatus: currentItem.status,
         masterLocationUpdated: savedMasterLocationUpdated,
         masterDueUpdated: savedMasterDueUpdated,
+        masterStatusUpdated: savedMasterStatusUpdated,
         remark: finalRemark,
         isFail: failed,
         isUnregistered: currentItem.isUnregistered
@@ -1522,6 +1601,7 @@ function exportToExcel() {
         "Date/Time",
         "Auditor",
         "Loc_Audit",
+        "Sticker_Loc_Audit",
         "Due_Audit",
         "MSA_Audit",
         "Remark"
@@ -1547,6 +1627,7 @@ function exportToExcel() {
                 s.time,
                 s.pic,
                 s.locRes,
+                s.stickerLocRes || "",
                 s.dueRes,
                 s.msaRes,
                 s.remark
@@ -1555,6 +1636,7 @@ function exportToExcel() {
             auditData.push([
                 ...baseRow,
                 "PENDING",
+                "",
                 "",
                 "",
                 "",
@@ -1578,6 +1660,7 @@ function exportToExcel() {
                 s.time,
                 s.pic,
                 s.locRes,
+                s.stickerLocRes || "",
                 s.dueRes,
                 s.msaRes,
                 s.remark

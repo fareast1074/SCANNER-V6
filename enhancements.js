@@ -1,5 +1,5 @@
 /*
- * GRID Calibration Inventory System - V2.1 experience layer
+ * GRID Calibration Inventory System - V2.2 experience layer
  *
  * This file intentionally keeps the existing Firebase Realtime Database paths
  * and record shape used by script.js. It upgrades the scanning workflow,
@@ -848,10 +848,12 @@ function v2MatchesSearch(auditRecord, masterItem, search) {
         auditRecord?.pic,
         auditRecord?.remark,
         auditRecord?.locRes,
+        auditRecord?.stickerLocRes,
         auditRecord?.dueRes,
         auditRecord?.msaRes,
         auditRecord?.updatedLocation,
         auditRecord?.updatedDue,
+        auditRecord?.updatedStatus,
         masterItem?.name,
         masterItem?.loc,
         masterItem?.bldg,
@@ -1001,7 +1003,8 @@ function updateDisplay() {
                 <td data-label="Code"><strong>${escapeHtml(record.barcode || "-")}</strong></td>
                 <td data-label="Name">${escapeHtml(record.name || masterItem?.name || "-")}</td>
                 <td data-label="PIC"><span style="color:var(--primary);font-weight:800">${escapeHtml(record.pic || "-")}</span></td>
-                <td data-label="Location">${v2Pill(record.locRes, ["CORRECT"])}</td>
+                <td data-label="Physical Location">${v2Pill(record.locRes, ["CORRECT"])}</td>
+                <td data-label="Sticker Location">${v2Pill(record.stickerLocRes || "N/A", ["CORRECT"], ["N/A"])}</td>
                 <td data-label="Due">${v2Pill(record.dueRes, ["VALID"], ["N/A"])}</td>
                 <td data-label="Status">${escapeHtml(originalStatus)}</td>
                 <td data-label="MSA">${v2Pill(record.msaRes, msaPassValues, msaNeutralValues)}</td>
@@ -1134,9 +1137,11 @@ function animateGauge() {
 function updateFailureChart(failedItems) {
     const counts = {
         "Wrong location": 0,
+        "Wrong sticker location": 0,
         "Expired due": 0,
         "Unreadable due": 0,
         "Missing MSA": 0,
+        "Status updated": 0,
         "Unregistered": 0,
         "Other": 0
     };
@@ -1147,6 +1152,11 @@ function updateFailureChart(failedItems) {
 
         if (record.locRes === "WRONG") {
             counts["Wrong location"] += 1;
+            categorized = true;
+        }
+
+        if (record.stickerLocRes === "WRONG") {
+            counts["Wrong sticker location"] += 1;
             categorized = true;
         }
 
@@ -1165,6 +1175,11 @@ function updateFailureChart(failedItems) {
             categorized = true;
         }
 
+        if (record.masterStatusUpdated) {
+            counts["Status updated"] += 1;
+            categorized = true;
+        }
+
         if (!masterItem || record.isUnregistered) {
             counts["Unregistered"] += 1;
             categorized = true;
@@ -1175,7 +1190,7 @@ function updateFailureChart(failedItems) {
 
     const labels = Object.keys(counts).filter(label => counts[label] > 0);
     const data = labels.map(label => counts[label]);
-    const colors = ["#d32f2f", "#f57c00", "#f9a825", "#7b1fa2", "#1565c0", "#795548"];
+    const colors = ["#d32f2f", "#c62828", "#f57c00", "#f9a825", "#7b1fa2", "#5d4037", "#1565c0", "#795548"];
     const canvas = v2El("failureChart");
     const legend = v2El("failureLegend");
 
@@ -1269,6 +1284,7 @@ function v2DueStatusSuggestion(dueValue) {
 function v2ClearToggleClasses() {
     [
         "btnLocCorrect", "btnLocWrong",
+        "btnStickerLocCorrect", "btnStickerLocWrong",
         "btnDueValid", "btnDueExpired", "btnDueUnreadable",
         "btnMsaYes", "btnMsaNo", "btnMsaNa"
     ].forEach(id => {
@@ -1283,6 +1299,9 @@ function v2ApplyToggleClasses() {
     if (selectedLoc === "CORRECT") v2El("btnLocCorrect")?.classList.add("active-pass");
     if (selectedLoc === "WRONG") v2El("btnLocWrong")?.classList.add("active-fail");
 
+    if (selectedStickerLoc === "CORRECT") v2El("btnStickerLocCorrect")?.classList.add("active-pass");
+    if (selectedStickerLoc === "WRONG") v2El("btnStickerLocWrong")?.classList.add("active-fail");
+
     if (selectedDue === "VALID") v2El("btnDueValid")?.classList.add("active-pass");
     if (selectedDue === "EXPIRED") v2El("btnDueExpired")?.classList.add("active-fail");
     if (selectedDue === "UNREADABLE") v2El("btnDueUnreadable")?.classList.add("active-fail");
@@ -1294,6 +1313,7 @@ function v2ApplyToggleClasses() {
 
 function setToggle(type, value) {
     if (type === "Loc") selectedLoc = value;
+    if (type === "StickerLoc") selectedStickerLoc = value;
     if (type === "Due") selectedDue = value;
     if (type === "Msa") selectedMsa = value;
 
@@ -1308,6 +1328,7 @@ function v2BuildRemarkSuggestion() {
 
     if (currentItem.isUnregistered) suggestions.push("Equipment not registered");
     if (selectedLoc === "WRONG") suggestions.push("Location not match");
+    if (selectedStickerLoc === "WRONG") suggestions.push("Location on sticker not match");
     if (selectedDue === "EXPIRED") suggestions.push("Wrong due date");
     if (selectedDue === "UNREADABLE") suggestions.push("Missing due date sticker");
     if (v2MsaRequired(currentItem.msa) && selectedMsa !== "YES") suggestions.push("MSA sticker missing");
@@ -1316,7 +1337,7 @@ function v2BuildRemarkSuggestion() {
 }
 
 function updateVerificationState() {
-    const checks = [selectedLoc, selectedDue, selectedMsa];
+    const checks = [selectedLoc, selectedStickerLoc, selectedDue, selectedMsa];
     const completed = checks.filter(Boolean).length;
     const isComplete = completed === checks.length;
     const progress = v2El("verificationProgress");
@@ -1327,7 +1348,7 @@ function updateVerificationState() {
         progress.classList.toggle("complete", isComplete);
         progress.textContent = isComplete
             ? "All verification checks are complete."
-            : `${completed} of 3 verification checks completed.`;
+            : `${completed} of 4 verification checks completed.`;
     }
 
     if (saveButton) {
@@ -1399,7 +1420,7 @@ function renderQCModal(auditRecord = null) {
             <div><span>Scanned time</span><strong>${escapeHtml(auditRecord.time || "-")}</strong></div>
             <div><span>Scanned by</span><strong>${escapeHtml(auditRecord.pic || "-")}</strong></div>
             <div><span>Audit result</span><strong>${auditRecord.isFail ? "FAIL" : "PASS"}</strong></div>
-            <div><span>Equipment status</span><strong>${safeStatus}</strong></div>
+            <div><span>Recorded equipment status</span><strong>${escapeHtml(auditRecord.updatedStatus || currentItem.status || "N/A")}</strong></div>
         </div>
     ` : "";
 
@@ -1431,6 +1452,24 @@ function renderQCModal(auditRecord = null) {
                         <button type="button" id="btnEditDue" class="btn-inline-edit" onclick="toggleMasterFieldEdit('due')" ${editDisabled}>EDIT</button>
                     </div>
                 </div>
+                <div>
+                    <span>Equipment status</span>
+                    <div class="master-edit-control">
+                        <strong id="qcStatusDisplay" class="master-edit-value">${safeStatus}</strong>
+                        <input type="text" id="qcStatusInput" class="master-edit-input" value="${safeStatus}" data-original-value="${safeStatus}"
+                            list="qcStatusSuggestions" maxlength="60" autocapitalize="characters"
+                            onkeydown="if(event.key === 'Enter'){ toggleMasterFieldEdit('status'); }" ${editDisabled}>
+                        <button type="button" id="btnEditStatus" class="btn-inline-edit" onclick="toggleMasterFieldEdit('status')" ${editDisabled}>EDIT</button>
+                        <datalist id="qcStatusSuggestions">
+                            <option value="ACTIVE"></option>
+                            <option value="INACTIVE"></option>
+                            <option value="UNDER REPAIR"></option>
+                            <option value="OUT OF SERVICE"></option>
+                            <option value="MISSING"></option>
+                            <option value="DISPOSED"></option>
+                        </datalist>
+                    </div>
+                </div>
                 <div><span>Registered MSA</span><strong>${safeMsa}</strong></div>
             </div>
         `;
@@ -1445,14 +1484,17 @@ function renderQCModal(auditRecord = null) {
 
     if (isEditMode) {
         selectedLoc = auditRecord.locRes || null;
+        selectedStickerLoc = auditRecord.stickerLocRes || null;
         selectedDue = auditRecord.dueRes || null;
         selectedMsa = auditRecord.msaRes || null;
     } else if (currentItem.isUnregistered) {
         selectedLoc = "WRONG";
+        selectedStickerLoc = "WRONG";
         selectedDue = "UNREADABLE";
         selectedMsa = "N/A";
     } else {
         selectedLoc = null;
+        selectedStickerLoc = null;
         selectedDue = null;
         selectedMsa = v2MsaRequired(currentItem.msa) ? null : "N/A";
     }
@@ -1497,8 +1539,8 @@ function renderQCModal(auditRecord = null) {
 async function submitQC() {
     if (!currentItem || v2IsSubmitting) return;
 
-    if (!selectedLoc || !selectedDue || !selectedMsa) {
-        showToast("Complete all three verification checks before saving.", "warning");
+    if (!selectedLoc || !selectedStickerLoc || !selectedDue || !selectedMsa) {
+        showToast("Complete all four verification checks before saving.", "warning");
         v2Feedback("fail");
         return;
     }
@@ -1509,14 +1551,16 @@ async function submitQC() {
     const remarkInput = v2El("qcRemark");
     const locationInput = v2El("qcLocationInput");
     const dueInput = v2El("qcDueInput");
+    const statusInput = v2El("qcStatusInput");
     const remarkValue = remarkInput?.value.trim() || "";
     const editedLocation = locationInput?.value.trim() || currentItem.loc;
     const editedDue = dueInput?.value.trim() || currentItem.due;
+    const editedStatus = statusInput?.value.trim() || currentItem.status;
     const isEditMode = Boolean(currentAuditEditRecord);
     const existingRecord = currentAuditEditRecord || {};
 
     try {
-        const masterUpdateResult = await overwriteMasterFieldsIfChanged(editedLocation, editedDue);
+        const masterUpdateResult = await overwriteMasterFieldsIfChanged(editedLocation, editedDue, editedStatus);
 
         if (masterUpdateResult === null) {
             v2IsSubmitting = false;
@@ -1526,14 +1570,17 @@ async function submitQC() {
 
         const masterLocationUpdated = Boolean(masterUpdateResult.locationUpdated);
         const masterDueUpdated = Boolean(masterUpdateResult.dueUpdated);
+        const masterStatusUpdated = Boolean(masterUpdateResult.statusUpdated);
         const savedMasterLocationUpdated = Boolean(existingRecord.masterLocationUpdated || masterLocationUpdated);
         const savedMasterDueUpdated = Boolean(existingRecord.masterDueUpdated || masterDueUpdated);
+        const savedMasterStatusUpdated = Boolean(existingRecord.masterStatusUpdated || masterStatusUpdated);
 
         if (masterLocationUpdated) selectedLoc = "WRONG";
 
         const automaticRemarks = [];
         if (savedMasterLocationUpdated) automaticRemarks.push("Location overwritten in master database");
         if (savedMasterDueUpdated) automaticRemarks.push("Due date overwritten in master database");
+        if (savedMasterStatusUpdated) automaticRemarks.push("Equipment status overwritten in master database");
 
         const abnormalSuggestion = v2BuildRemarkSuggestion();
         const generatedRemarks = [abnormalSuggestion, ...automaticRemarks].filter(Boolean);
@@ -1542,11 +1589,13 @@ async function submitQC() {
 
         const failed =
             selectedLoc === "WRONG" ||
+            selectedStickerLoc === "WRONG" ||
             selectedDue !== "VALID" ||
             msaFailed ||
             currentItem.isUnregistered ||
             savedMasterLocationUpdated ||
-            savedMasterDueUpdated;
+            savedMasterDueUpdated ||
+            savedMasterStatusUpdated;
 
         const now = new Date();
         const dateTimeString = now.toLocaleDateString("en-GB") + " " + now.toLocaleTimeString([], {
@@ -1561,12 +1610,15 @@ async function submitQC() {
             name: currentItem.name,
             pic: isEditMode ? (existingRecord.pic || loggedInUser) : loggedInUser,
             locRes: selectedLoc,
+            stickerLocRes: selectedStickerLoc,
             dueRes: selectedDue,
             msaRes: selectedMsa,
             updatedLocation: currentItem.loc,
             updatedDue: currentItem.due,
+            updatedStatus: currentItem.status,
             masterLocationUpdated: savedMasterLocationUpdated,
             masterDueUpdated: savedMasterDueUpdated,
+            masterStatusUpdated: savedMasterStatusUpdated,
             remark: finalRemark,
             isFail: failed,
             isUnregistered: currentItem.isUnregistered
@@ -1628,6 +1680,7 @@ function closeModal() {
     currentAuditEditRecord = null;
     currentLockOwned = false;
     selectedLoc = null;
+    selectedStickerLoc = null;
     selectedDue = null;
     selectedMsa = null;
     v2DueSuggestion = null;
@@ -2342,6 +2395,7 @@ function v2BuildReportData(useFilters) {
         "DATE/TIME",
         "AUDITOR",
         "LOCATION AUDIT",
+        "STICKER LOCATION AUDIT",
         "DUE AUDIT",
         "MSA AUDIT",
         "REMARK"
@@ -2367,13 +2421,14 @@ function v2BuildReportData(useFilters) {
                 audit.time || "",
                 audit.pic || "",
                 audit.locRes || "",
+                audit.stickerLocRes || "",
                 audit.dueRes || "",
                 audit.msaRes || "",
                 audit.remark || ""
             ];
             (audit.isFail ? abnormalRows : passedRows).push(row);
         } else {
-            row = [...base, "PENDING", "", "", "", "", "", ""];
+            row = [...base, "PENDING", "", "", "", "", "", "", ""];
             pendingRows.push(row);
         }
 
@@ -2397,6 +2452,7 @@ function v2BuildReportData(useFilters) {
             record.time || "",
             record.pic || "",
             record.locRes || "",
+            record.stickerLocRes || "",
             record.dueRes || "",
             record.msaRes || "",
             record.remark || ""
@@ -2444,7 +2500,7 @@ function v2BuildReportData(useFilters) {
     const completion = totalMaster ? `${Math.round((scanned / totalMaster) * 100)}%` : "0%";
 
     const summaryRows = [
-        ["GRID V2.1 CALIBRATION AUDIT REPORT"],
+        ["GRID V2.2 CALIBRATION AUDIT REPORT"],
         ["Generated", new Date().toLocaleString("en-MY")],
         ["Generated by", loggedInUser || "Unknown"],
         ["Scope", v2ReportFiltersDescription(filters, search)],
@@ -2481,7 +2537,7 @@ function v2WriteReport(useFilters) {
     try {
         const report = v2BuildReportData(useFilters);
         const workbook = XLSX.utils.book_new();
-        const dataWidths = [20, 32, 24, 12, 16, 10, 14, 20, 18, 16, 16, 14, 38];
+        const dataWidths = [20, 32, 24, 12, 16, 10, 14, 20, 18, 16, 20, 16, 14, 38];
 
         XLSX.utils.book_append_sheet(workbook, v2Worksheet(report.summaryRows, [25, 60], false), "Summary");
         XLSX.utils.book_append_sheet(workbook, v2Worksheet(report.allRows, dataWidths), "All Equipment");
