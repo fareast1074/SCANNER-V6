@@ -1370,6 +1370,12 @@ tbody tr:hover {
     color: var(--success);
 }
 
+.verification-progress.missing {
+    border-color: rgba(183, 28, 28, 0.38);
+    background: rgba(255, 235, 238, 0.92);
+    color: #b71c1c;
+}
+
 .audit-grid {
     display: grid;
     gap: 10px;
@@ -1512,6 +1518,36 @@ tbody tr:hover {
     padding: 11px 14px;
     border: 1px solid var(--danger);
     color: var(--danger);
+}
+
+.btn-missing-equipment {
+    flex: 1.35;
+    min-height: 48px;
+    padding: 11px 14px;
+    border: 1px solid #b71c1c;
+    border-radius: var(--radius-sm);
+    background: #fff;
+    color: #b71c1c;
+    font-weight: 900;
+    cursor: pointer;
+    transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+
+.btn-missing-equipment:not(:disabled):hover,
+.btn-missing-equipment.active {
+    background: #b71c1c;
+    color: #fff;
+    box-shadow: 0 7px 16px rgba(183, 28, 28, 0.2);
+    transform: translateY(-1px);
+}
+
+.master-status-note {
+    display: block;
+    margin-top: 4px;
+    color: var(--text-muted);
+    font-size: 0.62rem;
+    font-weight: 700;
+    white-space: nowrap;
 }
 
 /* Import modal */
@@ -1992,7 +2028,8 @@ tbody tr:hover {
     }
 
     .btn-save,
-    .btn-cancel {
+    .btn-cancel,
+    .btn-missing-equipment {
         width: 100%;
     }
 

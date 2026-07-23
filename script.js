@@ -873,7 +873,7 @@ function renderQCModal(auditRecord = null) {
                         <option value="UNDER REPAIR"></option>
                         <option value="OUT OF SERVICE"></option>
                         <option value="MISSING"></option>
-                        <option value="DISPOSED"></option>
+                        <option value="ABOLISHED"></option>
                     </datalist>
                 </div>
             </div>

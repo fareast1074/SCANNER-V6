@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#5d4037">
     <meta name="description" content="Scanner-first calibration inventory audit system">
-    <title>GRID V2.2 | Calibration Inventory System</title>
+    <title>GRID V2.3 | Calibration Inventory System</title>
     <link rel="manifest" href="manifest.json">
     <link rel="icon" href="icon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="style.css">
@@ -28,7 +28,7 @@
     <div id="loginOverlay">
         <div class="login-card">
             <div class="scanner-line"></div>
-            <div class="login-kicker">GRID V2.2 | Dev by F4REAST </div>
+            <div class="login-kicker">GRID V2.3 | Dev by F4REAST </div>
             <div class="glitch-title">INVENTORY SYSTEM</div>
             <label class="sr-only" for="username">Name</label>
             <input type="text" id="username" placeholder="Name" autocomplete="username">
@@ -369,7 +369,7 @@
                 <div id="modalDataBox" class="modal-data-box"></div>
 
                 <div id="verificationProgress" class="verification-progress" aria-live="polite">
-                    Complete all four verification checks to save.
+                    Complete all four verification checks, or mark the equipment missing.
                 </div>
 
                 <div class="audit-grid">
@@ -436,6 +436,7 @@
                         <option value="Location on sticker not match"></option>
                         <option value="Wrong due date"></option>
                         <option value="MSA sticker missing"></option>
+                        <option value="Equipment missing"></option>
                     </datalist>
                     <div id="remarkSuggestion" class="remark-suggestion" hidden>
                         <span id="remarkSuggestionText"></span>
@@ -445,6 +446,11 @@
             </div>
 
             <div class="modal-action-bar">
+                <button id="btnMissingEquipment" type="button" class="btn-missing-equipment"
+                        onclick="submitMissingEquipment()"
+                        title="Save this item as missing without completing the verification checks">
+                    Mark Missing &amp; Save
+                </button>
                 <button id="btnSubmitQC" class="btn-save" onclick="submitQC()" disabled>Complete verification</button>
                 <button onclick="closeModal()" class="btn-cancel">Close</button>
             </div>

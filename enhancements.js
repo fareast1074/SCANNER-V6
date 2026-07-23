@@ -1,5 +1,5 @@
 /*
- * GRID Calibration Inventory System - V2.2 experience layer
+ * GRID Calibration Inventory System - V2.3 experience layer
  *
  * This file intentionally keeps the existing Firebase Realtime Database paths
  * and record shape used by script.js. It upgrades the scanning workflow,
@@ -23,6 +23,7 @@ let v2RemarkSuggestion = "";
 let v2PendingMasterImport = null;
 let v2SyncInProgress = false;
 let v2IsSubmitting = false;
+let v2MissingMode = false;
 let v2ScannerInputInitialized = false;
 let v2AudioContext = null;
 
@@ -854,6 +855,7 @@ function v2MatchesSearch(auditRecord, masterItem, search) {
         auditRecord?.updatedLocation,
         auditRecord?.updatedDue,
         auditRecord?.updatedStatus,
+        auditRecord?.isMissing ? "MISSING EQUIPMENT" : "",
         masterItem?.name,
         masterItem?.loc,
         masterItem?.bldg,
@@ -997,6 +999,9 @@ function updateDisplay() {
             const key = v2SafeActionValue(record.cloudId || record.id || record.barcode || "");
             const msaPassValues = v2AuditPassesMsa(record, masterItem) ? [record.msaRes] : [];
             const msaNeutralValues = record.msaRes === "N/A" ? ["N/A"] : [];
+            const statusDisplay = record.isMissing || record.locRes === "MISSING"
+                ? `${v2Pill("MISSING")}<small class="master-status-note">Master: ${escapeHtml(originalStatus)}</small>`
+                : escapeHtml(originalStatus);
 
             return `<tr class="${rowClass}">
                 <td data-label="Time">${escapeHtml(record.time || "-")}</td>
@@ -1006,7 +1011,7 @@ function updateDisplay() {
                 <td data-label="Physical Location">${v2Pill(record.locRes, ["CORRECT"])}</td>
                 <td data-label="Sticker Location">${v2Pill(record.stickerLocRes || "N/A", ["CORRECT"], ["N/A"])}</td>
                 <td data-label="Due">${v2Pill(record.dueRes, ["VALID"], ["N/A"])}</td>
-                <td data-label="Status">${escapeHtml(originalStatus)}</td>
+                <td data-label="Status">${statusDisplay}</td>
                 <td data-label="MSA">${v2Pill(record.msaRes, msaPassValues, msaNeutralValues)}</td>
                 <td data-label="Remark">${escapeHtml(record.remark || "-")}</td>
                 <td data-label="Action">
@@ -1136,6 +1141,7 @@ function animateGauge() {
 
 function updateFailureChart(failedItems) {
     const counts = {
+        "Missing equipment": 0,
         "Wrong location": 0,
         "Wrong sticker location": 0,
         "Expired due": 0,
@@ -1149,6 +1155,11 @@ function updateFailureChart(failedItems) {
     failedItems.forEach(record => {
         const masterItem = masterDB[String(record.barcode || "").toUpperCase()];
         let categorized = false;
+
+        if (record.isMissing || record.locRes === "MISSING") {
+            counts["Missing equipment"] += 1;
+            return;
+        }
 
         if (record.locRes === "WRONG") {
             counts["Wrong location"] += 1;
@@ -1190,7 +1201,7 @@ function updateFailureChart(failedItems) {
 
     const labels = Object.keys(counts).filter(label => counts[label] > 0);
     const data = labels.map(label => counts[label]);
-    const colors = ["#d32f2f", "#c62828", "#f57c00", "#f9a825", "#7b1fa2", "#5d4037", "#1565c0", "#795548"];
+    const colors = ["#b71c1c", "#d32f2f", "#c62828", "#f57c00", "#f9a825", "#7b1fa2", "#5d4037", "#1565c0", "#795548"];
     const canvas = v2El("failureChart");
     const legend = v2El("failureLegend");
 
@@ -1309,9 +1320,28 @@ function v2ApplyToggleClasses() {
     if (selectedMsa === "YES") v2El("btnMsaYes")?.classList.add("active-pass");
     if (selectedMsa === "NO") v2El("btnMsaNo")?.classList.add("active-fail");
     if (selectedMsa === "N/A") v2El("btnMsaNa")?.classList.add("active-neutral");
+
+    v2El("btnMissingEquipment")?.classList.toggle("active", v2MissingMode);
+}
+
+function v2ResetNormalVerification() {
+    selectedLoc = null;
+    selectedStickerLoc = null;
+    selectedDue = null;
+    selectedMsa = v2MsaRequired(currentItem?.msa) ? null : "N/A";
 }
 
 function setToggle(type, value) {
+    if (v2MissingMode) {
+        v2MissingMode = false;
+        v2ResetNormalVerification();
+
+        const remarkInput = v2El("qcRemark");
+        if (remarkInput?.value.trim().toUpperCase() === "EQUIPMENT MISSING") {
+            remarkInput.value = "";
+        }
+    }
+
     if (type === "Loc") selectedLoc = value;
     if (type === "StickerLoc") selectedStickerLoc = value;
     if (type === "Due") selectedDue = value;
@@ -1326,6 +1356,7 @@ function v2BuildRemarkSuggestion() {
 
     const suggestions = [];
 
+    if (v2MissingMode) return "Equipment missing";
     if (currentItem.isUnregistered) suggestions.push("Equipment not registered");
     if (selectedLoc === "WRONG") suggestions.push("Location not match");
     if (selectedStickerLoc === "WRONG") suggestions.push("Location on sticker not match");
@@ -1336,28 +1367,56 @@ function v2BuildRemarkSuggestion() {
     return suggestions.join("; ");
 }
 
+function v2NormalVerificationState() {
+    const checks = [
+        [selectedLoc, ["CORRECT", "WRONG"]],
+        [selectedStickerLoc, ["CORRECT", "WRONG"]],
+        [selectedDue, ["VALID", "EXPIRED", "UNREADABLE"]],
+        [selectedMsa, ["YES", "NO", "N/A"]]
+    ];
+
+    const completed = checks.filter(([value, allowed]) => allowed.includes(value)).length;
+    return { completed, isComplete: completed === checks.length };
+}
+
 function updateVerificationState() {
-    const checks = [selectedLoc, selectedStickerLoc, selectedDue, selectedMsa];
-    const completed = checks.filter(Boolean).length;
-    const isComplete = completed === checks.length;
+    const { completed, isComplete } = v2NormalVerificationState();
     const progress = v2El("verificationProgress");
     const saveButton = v2El("btnSubmitQC");
+    const missingButton = v2El("btnMissingEquipment");
     const editMode = Boolean(currentAuditEditRecord);
 
     if (progress) {
-        progress.classList.toggle("complete", isComplete);
-        progress.textContent = isComplete
-            ? "All verification checks are complete."
-            : `${completed} of 4 verification checks completed.`;
+        progress.classList.toggle("complete", isComplete && !v2MissingMode);
+        progress.classList.toggle("missing", v2MissingMode);
+        progress.textContent = v2MissingMode
+            ? "Equipment is marked missing. The other verification checks are not required."
+            : isComplete
+                ? "All verification checks are complete."
+                : `${completed} of 4 verification checks completed, or use Mark Missing & Save.`;
     }
 
     if (saveButton) {
-        saveButton.disabled = !isComplete || v2IsSubmitting;
-        saveButton.textContent = v2IsSubmitting
+        saveButton.disabled = !isComplete || v2IsSubmitting || v2MissingMode;
+        saveButton.textContent = v2IsSubmitting && !v2MissingMode
             ? "Saving..."
             : isComplete
                 ? (editMode ? "Update audit record" : "Save audit record")
                 : "Complete verification";
+    }
+
+    if (missingButton) {
+        const unavailable = Boolean(currentItem?.isUnregistered);
+        missingButton.disabled = v2IsSubmitting || unavailable;
+        missingButton.classList.toggle("active", v2MissingMode);
+        missingButton.textContent = v2IsSubmitting && v2MissingMode
+            ? "Saving missing..."
+            : v2MissingMode && editMode
+                ? "Keep Missing & Save"
+                : "Mark Missing & Save";
+        missingButton.title = unavailable
+            ? "Only registered equipment can be marked missing."
+            : "Save this item as missing without completing the verification checks.";
     }
 
     v2RemarkSuggestion = v2BuildRemarkSuggestion();
@@ -1415,11 +1474,12 @@ function renderQCModal(auditRecord = null) {
     const safeMsa = escapeHtml(currentItem.msa || "N/A");
     const editDisabled = currentItem.isUnregistered ? "disabled" : "";
 
+    const recordIsMissing = Boolean(auditRecord && (auditRecord.isMissing || auditRecord.locRes === "MISSING"));
     const detailMeta = isEditMode ? `
         <div class="scan-detail-meta">
             <div><span>Scanned time</span><strong>${escapeHtml(auditRecord.time || "-")}</strong></div>
             <div><span>Scanned by</span><strong>${escapeHtml(auditRecord.pic || "-")}</strong></div>
-            <div><span>Audit result</span><strong>${auditRecord.isFail ? "FAIL" : "PASS"}</strong></div>
+            <div><span>Audit result</span><strong>${recordIsMissing ? "MISSING" : auditRecord.isFail ? "FAIL" : "PASS"}</strong></div>
             <div><span>Recorded equipment status</span><strong>${escapeHtml(auditRecord.updatedStatus || currentItem.status || "N/A")}</strong></div>
         </div>
     ` : "";
@@ -1482,7 +1542,14 @@ function renderQCModal(auditRecord = null) {
 
     v2DueSuggestion = v2DueStatusSuggestion(currentItem.due);
 
-    if (isEditMode) {
+    v2MissingMode = recordIsMissing;
+
+    if (recordIsMissing) {
+        selectedLoc = "MISSING";
+        selectedStickerLoc = "N/A";
+        selectedDue = "N/A";
+        selectedMsa = "N/A";
+    } else if (isEditMode) {
         selectedLoc = auditRecord.locRes || null;
         selectedStickerLoc = auditRecord.stickerLocRes || null;
         selectedDue = auditRecord.dueRes || null;
@@ -1493,10 +1560,7 @@ function renderQCModal(auditRecord = null) {
         selectedDue = "UNREADABLE";
         selectedMsa = "N/A";
     } else {
-        selectedLoc = null;
-        selectedStickerLoc = null;
-        selectedDue = null;
-        selectedMsa = v2MsaRequired(currentItem.msa) ? null : "N/A";
+        v2ResetNormalVerification();
     }
 
     const dueText = v2El("dueSuggestionText");
@@ -1536,16 +1600,18 @@ function renderQCModal(auditRecord = null) {
     v2SetScannerStatus(`Verify ${currentItem.barcode}`, "busy");
 }
 
-async function submitQC() {
+function v2FormatMissingRemark(remarkValue) {
+    const cleaned = String(remarkValue || "").trim();
+    if (!cleaned) return "Equipment missing";
+    if (cleaned.toUpperCase().includes("EQUIPMENT MISSING")) return cleaned;
+    return `Equipment missing; ${cleaned}`;
+}
+
+async function v2SaveAuditRecord({ isMissing = false } = {}) {
     if (!currentItem || v2IsSubmitting) return;
 
-    if (!selectedLoc || !selectedStickerLoc || !selectedDue || !selectedMsa) {
-        showToast("Complete all four verification checks before saving.", "warning");
-        v2Feedback("fail");
-        return;
-    }
-
     v2IsSubmitting = true;
+    v2MissingMode = isMissing;
     updateVerificationState();
 
     const remarkInput = v2El("qcRemark");
@@ -1553,9 +1619,9 @@ async function submitQC() {
     const dueInput = v2El("qcDueInput");
     const statusInput = v2El("qcStatusInput");
     const remarkValue = remarkInput?.value.trim() || "";
-    const editedLocation = locationInput?.value.trim() || currentItem.loc;
-    const editedDue = dueInput?.value.trim() || currentItem.due;
-    const editedStatus = statusInput?.value.trim() || currentItem.status;
+    const editedLocation = isMissing ? currentItem.loc : (locationInput?.value.trim() || currentItem.loc);
+    const editedDue = isMissing ? currentItem.due : (dueInput?.value.trim() || currentItem.due);
+    const editedStatus = isMissing ? currentItem.status : (statusInput?.value.trim() || currentItem.status);
     const isEditMode = Boolean(currentAuditEditRecord);
     const existingRecord = currentAuditEditRecord || {};
 
@@ -1575,19 +1641,21 @@ async function submitQC() {
         const savedMasterDueUpdated = Boolean(existingRecord.masterDueUpdated || masterDueUpdated);
         const savedMasterStatusUpdated = Boolean(existingRecord.masterStatusUpdated || masterStatusUpdated);
 
-        if (masterLocationUpdated) selectedLoc = "WRONG";
+        if (!isMissing && masterLocationUpdated) selectedLoc = "WRONG";
 
         const automaticRemarks = [];
         if (savedMasterLocationUpdated) automaticRemarks.push("Location overwritten in master database");
         if (savedMasterDueUpdated) automaticRemarks.push("Due date overwritten in master database");
         if (savedMasterStatusUpdated) automaticRemarks.push("Equipment status overwritten in master database");
 
-        const abnormalSuggestion = v2BuildRemarkSuggestion();
+        const abnormalSuggestion = isMissing ? "" : v2BuildRemarkSuggestion();
         const generatedRemarks = [abnormalSuggestion, ...automaticRemarks].filter(Boolean);
-        const finalRemark = remarkValue || generatedRemarks.join("; ") || "-";
-        const msaFailed = v2MsaRequired(currentItem.msa) && selectedMsa !== "YES";
+        const finalRemark = isMissing
+            ? v2FormatMissingRemark(remarkValue)
+            : remarkValue || generatedRemarks.join("; ") || "-";
+        const msaFailed = !isMissing && v2MsaRequired(currentItem.msa) && selectedMsa !== "YES";
 
-        const failed =
+        const failed = isMissing ||
             selectedLoc === "WRONG" ||
             selectedStickerLoc === "WRONG" ||
             selectedDue !== "VALID" ||
@@ -1609,10 +1677,10 @@ async function submitQC() {
             barcode: isEditMode ? (existingRecord.barcode || currentItem.barcode) : currentItem.barcode,
             name: currentItem.name,
             pic: isEditMode ? (existingRecord.pic || loggedInUser) : loggedInUser,
-            locRes: selectedLoc,
-            stickerLocRes: selectedStickerLoc,
-            dueRes: selectedDue,
-            msaRes: selectedMsa,
+            locRes: isMissing ? "MISSING" : selectedLoc,
+            stickerLocRes: isMissing ? "N/A" : selectedStickerLoc,
+            dueRes: isMissing ? "N/A" : selectedDue,
+            msaRes: isMissing ? "N/A" : selectedMsa,
             updatedLocation: currentItem.loc,
             updatedDue: currentItem.due,
             updatedStatus: currentItem.status,
@@ -1621,30 +1689,33 @@ async function submitQC() {
             masterStatusUpdated: savedMasterStatusUpdated,
             remark: finalRemark,
             isFail: failed,
+            isMissing,
             isUnregistered: currentItem.isUnregistered
         };
+
+        const resultText = isMissing ? "missing" : failed ? "abnormal" : "pass";
 
         if (isEditMode) {
             if (existingRecord.cloudId) auditData.cloudId = existingRecord.cloudId;
             auditData.editedBy = loggedInUser;
             auditData.editedAt = dateTimeString;
             await saveEditedAuditRecord(auditData);
-            v2SetLastScan(auditData.barcode, failed ? "Updated - abnormal" : "Updated - pass");
-            showToast("Audit record updated.", failed ? "warning" : "success");
+            v2SetLastScan(auditData.barcode, `Updated - ${resultText}`);
+            showToast(isMissing ? "Equipment remains marked as missing." : "Audit record updated.", failed ? "warning" : "success");
         } else if (isOnline) {
             const newRef = db.ref("audit_history").push();
             auditData.cloudId = newRef.key;
             await newRef.set(auditData);
-            v2SetLastScan(auditData.barcode, failed ? "Saved - abnormal" : "Saved - pass");
-            showToast(failed ? "Abnormal audit record saved." : "Audit record saved.", failed ? "warning" : "success");
+            v2SetLastScan(auditData.barcode, `Saved - ${resultText}`);
+            showToast(isMissing ? "Equipment marked as missing." : failed ? "Abnormal audit record saved." : "Audit record saved.", failed ? "warning" : "success");
         } else {
             pendingUploads.push(auditData);
             localStorage.setItem("pending_queue", JSON.stringify(pendingUploads));
             scanHistory.unshift(auditData);
             v2UpdatePendingBadge();
             updateDisplay();
-            v2SetLastScan(auditData.barcode, failed ? "Queued - abnormal" : "Queued - pass");
-            showToast("Offline: audit record queued for synchronization.", "warning");
+            v2SetLastScan(auditData.barcode, `Queued - ${resultText}`);
+            showToast(isMissing ? "Offline: missing record queued for synchronization." : "Offline: audit record queued for synchronization.", "warning");
         }
 
         v2Feedback(failed ? "fail" : "pass");
@@ -1656,6 +1727,40 @@ async function submitQC() {
         v2IsSubmitting = false;
         updateVerificationState();
     }
+}
+
+async function submitQC() {
+    if (!currentItem || v2IsSubmitting) return;
+
+    const { isComplete } = v2NormalVerificationState();
+    if (!isComplete) {
+        showToast("Complete all four verification checks, or use Mark Missing & Save.", "warning");
+        v2Feedback("fail");
+        return;
+    }
+
+    v2MissingMode = false;
+    await v2SaveAuditRecord({ isMissing: false });
+}
+
+async function submitMissingEquipment() {
+    if (!currentItem || v2IsSubmitting) return;
+
+    if (currentItem.isUnregistered) {
+        showToast("Only registered equipment can be marked missing.", "warning");
+        v2Feedback("fail");
+        return;
+    }
+
+    v2MissingMode = true;
+    selectedLoc = "MISSING";
+    selectedStickerLoc = "N/A";
+    selectedDue = "N/A";
+    selectedMsa = "N/A";
+    v2ApplyToggleClasses();
+    updateVerificationState();
+
+    await v2SaveAuditRecord({ isMissing: true });
 }
 
 function closeModal() {
@@ -1686,6 +1791,7 @@ function closeModal() {
     v2DueSuggestion = null;
     v2RemarkSuggestion = "";
     v2IsSubmitting = false;
+    v2MissingMode = false;
     setModalMode(false);
     updateDisplay();
 
@@ -2417,7 +2523,7 @@ function v2BuildReportData(useFilters) {
         if (audit) {
             row = [
                 ...base,
-                audit.isFail ? "FAIL" : "PASS",
+                audit.isMissing || audit.locRes === "MISSING" ? "MISSING" : audit.isFail ? "FAIL" : "PASS",
                 audit.time || "",
                 audit.pic || "",
                 audit.locRes || "",
@@ -2448,7 +2554,7 @@ function v2BuildReportData(useFilters) {
             "N/A",
             "UNREGISTERED",
             "N/A",
-            "FAIL",
+            record.isMissing || record.locRes === "MISSING" ? "MISSING" : "FAIL",
             record.time || "",
             record.pic || "",
             record.locRes || "",
@@ -2472,7 +2578,7 @@ function v2BuildReportData(useFilters) {
         const stats = auditorMap.get(auditor);
         stats.total += 1;
         if (auditStatus === "PASS") stats.passed += 1;
-        if (auditStatus === "FAIL") stats.abnormal += 1;
+        if (auditStatus !== "PASS") stats.abnormal += 1;
     });
 
     unregisteredRows.slice(1).forEach(row => {
@@ -2496,11 +2602,12 @@ function v2BuildReportData(useFilters) {
     const abnormal = abnormalRows.length - 1;
     const pending = pendingRows.length - 1;
     const unregistered = unregisteredRows.length - 1;
+    const missing = allRows.slice(1).filter(row => row[6] === "MISSING").length;
     const scanned = passed + abnormal;
     const completion = totalMaster ? `${Math.round((scanned / totalMaster) * 100)}%` : "0%";
 
     const summaryRows = [
-        ["GRID V2.2 CALIBRATION AUDIT REPORT"],
+        ["GRID V2.3 CALIBRATION AUDIT REPORT"],
         ["Generated", new Date().toLocaleString("en-MY")],
         ["Generated by", loggedInUser || "Unknown"],
         ["Scope", v2ReportFiltersDescription(filters, search)],
@@ -2510,6 +2617,7 @@ function v2BuildReportData(useFilters) {
         ["Scanned", scanned],
         ["Passed", passed],
         ["Abnormal", abnormal],
+        ["Missing equipment", missing],
         ["Pending", pending],
         ["Unregistered", unregistered],
         ["Completion", completion]
