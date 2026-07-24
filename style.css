@@ -175,6 +175,7 @@ select:focus-visible,
 .btn-save,
 .btn-full-report,
 .btn-excel,
+.btn-csv,
 .file-button {
     border: 0;
     border-radius: var(--radius-sm);
@@ -196,6 +197,7 @@ select:focus-visible,
 .btn-save:hover,
 .btn-full-report:hover,
 .btn-excel:hover,
+.btn-csv:hover,
 .file-button:hover {
     transform: translateY(-1px);
     box-shadow: 0 7px 16px rgba(62, 39, 35, 0.17);
@@ -396,6 +398,7 @@ button:disabled {
 .btn-primary,
 .btn-full-report,
 .btn-excel,
+.btn-csv,
 .btn-secondary {
     min-height: 44px;
     padding: 10px 14px;
@@ -940,6 +943,10 @@ button:disabled {
     color: var(--text-muted);
     font-size: 0.76rem;
     text-align: center;
+}
+
+.btn-csv {
+    background: #1565c0;
 }
 
 .btn-excel {
@@ -1819,7 +1826,7 @@ tbody tr:hover {
     }
 
     .filter-actions .btn-full-report {
-        grid-column: 1 / -1;
+        grid-column: auto;
     }
 
     .table-container {

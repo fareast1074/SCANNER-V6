@@ -1,6 +1,6 @@
 {
-  "name": "GRID V2.3 Calibration Inventory System",
-  "short_name": "GRID V2.3",
+  "name": "GRID V2.5 Calibration Inventory System",
+  "short_name": "GRID V2.5",
   "description": "Scanner-first calibration inventory auditing with Firebase Realtime Database.",
   "start_url": "./index.html",
   "scope": "./",

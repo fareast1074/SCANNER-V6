@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#5d4037">
     <meta name="description" content="Scanner-first calibration inventory audit system">
-    <title>GRID V2.3 | Calibration Inventory System</title>
+    <title>GRID V2.5 | Calibration Inventory System</title>
     <link rel="manifest" href="manifest.json">
     <link rel="icon" href="icon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="style.css">
@@ -28,7 +28,7 @@
     <div id="loginOverlay">
         <div class="login-card">
             <div class="scanner-line"></div>
-            <div class="login-kicker">GRID V2.3 | Dev by F4REAST </div>
+            <div class="login-kicker">GRID V2.5 | Dev by F4REAST </div>
             <div class="glitch-title">INVENTORY SYSTEM</div>
             <label class="sr-only" for="username">Name</label>
             <input type="text" id="username" placeholder="Name" autocomplete="username">
@@ -157,7 +157,7 @@
             <div>
                 <span class="eyebrow">MASTER DATA</span>
                 <strong>Load CSV or Excel with validation preview</strong>
-                <p>Expected columns: Equipment Code, Name, Location, Due Date, Status, MSA.</p>
+                <p>Supports Equipment Code/Name/Location/Due Date/Status/MSA and EquipName/SerialNo/EquipCode/LocationName/Building/ProdType layouts.</p>
             </div>
             <label class="file-button" for="masterFile">Choose Master File</label>
             <input type="file" id="masterFile" accept=".csv,.xlsx,.xls" onchange="loadMasterData(this)">
@@ -166,7 +166,7 @@
         <section id="filterZone" class="filter-panel" aria-label="Audit filters">
             <label class="control-field search-field" for="globalSearch">
                 <span>Search</span>
-                <input type="search" id="globalSearch" placeholder="Code, name, location, auditor or remark...">
+                <input type="search" id="globalSearch" placeholder="Code, serial, name, location, auditor or remark...">
             </label>
             <div class="control-field">
                 <span id="filterBuildingFieldLabel">Building</span>
@@ -305,6 +305,8 @@
             </div>
             <div class="filter-actions">
                 <button onclick="resetFilters()" class="btn-secondary">Reset</button>
+                <button onclick="exportFilteredCsv()" class="btn-csv"
+                        title="Export filtered equipment with MISSING, PENDING, or OK status">Export CSV Filtered</button>
                 <button onclick="exportFilteredOnly()" class="btn-excel">Filtered Excel</button>
                 <button onclick="exportToExcel()" class="btn-full-report">Full Report</button>
             </div>
@@ -483,7 +485,7 @@
                 <div class="section-header"><span>Preview</span><small>First 10 valid rows</small></div>
                 <div class="table-container import-preview-table">
                     <table>
-                        <thead><tr><th>Code</th><th>Name</th><th>Location</th><th>Due</th><th>Status</th><th>MSA</th></tr></thead>
+                        <thead><tr><th>Code</th><th>Name</th><th>Location</th><th>Due</th><th>Status</th><th>MSA</th><th>Serial No.</th></tr></thead>
                         <tbody id="importPreviewBody"></tbody>
                     </table>
                 </div>

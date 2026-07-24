@@ -1,5 +1,5 @@
 /*
- * GRID Calibration Inventory System - V2.3 experience layer
+ * GRID Calibration Inventory System - V2.5 experience layer
  *
  * This file intentionally keeps the existing Firebase Realtime Database paths
  * and record shape used by script.js. It upgrades the scanning workflow,
@@ -62,6 +62,160 @@ function v2Slug(value) {
         .replace(/[^a-z0-9]+/gi, "-")
         .replace(/^-+|-+$/g, "")
         .toLowerCase() || "all";
+}
+
+const V2_MASTER_FIELD_ALIASES = {
+    code: ["EQUIPMENTCODE", "EQUIPCODE", "CODE", "BARCODE", "ASSETCODE"],
+    name: ["EQUIPMENTNAME", "EQUIPNAME", "NAME", "ASSETNAME"],
+    serialNo: ["SERIALNO", "SERIALNUMBER", "SERIALNUM", "SERIAL", "SN"],
+    location: ["LOCATIONNAME", "LOCATION", "LOC", "EQUIPMENTLOCATION"],
+    building: ["BUILDING", "BLDG"],
+    production: ["PRODTYPE", "PRODUCTIONTYPE", "PRODUCTION", "PROD"],
+    due: ["DUEDATE", "CALIBRATIONDUEDATE", "CALDUEDATE", "DUE"],
+    status: ["STATUS", "STATU", "EQUIPMENTSTATUS", "EQUIPSTATUS"],
+    msa: ["MSA", "MSAREQUIREMENT", "MSAREQUIRED"]
+};
+
+let v2RawMasterLookupSource = null;
+let v2RawMasterLookupCache = null;
+
+function v2NormalizeFieldKey(value) {
+    return String(value ?? "")
+        .trim()
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, "");
+}
+
+function v2FirstNonBlank(...values) {
+    for (const value of values) {
+        if (value === null || value === undefined) continue;
+        const text = String(value).trim();
+        if (text !== "") return text;
+    }
+
+    return "";
+}
+
+function v2ObjectValueByAliases(object, aliases) {
+    if (!object || typeof object !== "object") return "";
+
+    const keysByNormalizedName = new Map(
+        Object.keys(object).map(key => [v2NormalizeFieldKey(key), key])
+    );
+
+    for (const alias of aliases) {
+        const originalKey = keysByNormalizedName.get(v2NormalizeFieldKey(alias));
+        if (!originalKey) continue;
+
+        const value = object[originalKey];
+        if (value !== null && value !== undefined && String(value).trim() !== "") {
+            return value;
+        }
+    }
+
+    return "";
+}
+
+function v2GetRawMasterLookup() {
+    if (v2RawMasterLookupSource === rawMasterRows && v2RawMasterLookupCache) {
+        return v2RawMasterLookupCache;
+    }
+
+    const rows = Array.isArray(rawMasterRows) ? rawMasterRows : [];
+    const header = Array.isArray(rows[0]) ? rows[0] : [];
+    const headerIndexes = new Map();
+
+    header.forEach((value, index) => {
+        const normalized = v2NormalizeFieldKey(value);
+        if (normalized && !headerIndexes.has(normalized)) {
+            headerIndexes.set(normalized, index);
+        }
+    });
+
+    let codeIndex = -1;
+    for (const alias of V2_MASTER_FIELD_ALIASES.code) {
+        const index = headerIndexes.get(v2NormalizeFieldKey(alias));
+        if (index !== undefined) {
+            codeIndex = index;
+            break;
+        }
+    }
+    if (codeIndex < 0) codeIndex = 0;
+
+    const rowsByCode = new Map();
+    const orderedCodes = [];
+
+    rows.slice(1).forEach(row => {
+        if (!Array.isArray(row)) return;
+
+        const code = String(row[codeIndex] ?? "").trim().toUpperCase();
+        if (!code || rowsByCode.has(code)) return;
+
+        rowsByCode.set(code, row);
+        orderedCodes.push(code);
+    });
+
+    v2RawMasterLookupSource = rawMasterRows;
+    v2RawMasterLookupCache = { headerIndexes, rowsByCode, orderedCodes };
+    return v2RawMasterLookupCache;
+}
+
+function v2RawMasterValue(code, aliases) {
+    const lookup = v2GetRawMasterLookup();
+    const row = lookup.rowsByCode.get(String(code || "").trim().toUpperCase());
+    if (!row) return "";
+
+    for (const alias of aliases) {
+        const index = lookup.headerIndexes.get(v2NormalizeFieldKey(alias));
+        if (index === undefined) continue;
+
+        const value = row[index];
+        if (value !== null && value !== undefined && String(value).trim() !== "") {
+            return value;
+        }
+    }
+
+    return "";
+}
+
+function v2GetExportEquipmentFields(code, item) {
+    const normalizedCode = String(code || "").trim().toUpperCase();
+    const name = v2FirstNonBlank(
+        v2ObjectValueByAliases(item, V2_MASTER_FIELD_ALIASES.name),
+        v2RawMasterValue(normalizedCode, V2_MASTER_FIELD_ALIASES.name),
+        "UNKNOWN"
+    );
+    const serialNo = v2FirstNonBlank(
+        v2ObjectValueByAliases(item, V2_MASTER_FIELD_ALIASES.serialNo),
+        v2RawMasterValue(normalizedCode, V2_MASTER_FIELD_ALIASES.serialNo)
+    );
+    const location = v2FirstNonBlank(
+        v2ObjectValueByAliases(item, V2_MASTER_FIELD_ALIASES.location),
+        v2RawMasterValue(normalizedCode, V2_MASTER_FIELD_ALIASES.location),
+        "N/A"
+    );
+    const locationParts = parseLocationParts(location);
+    const building = v2FirstNonBlank(
+        v2ObjectValueByAliases(item, V2_MASTER_FIELD_ALIASES.building),
+        v2RawMasterValue(normalizedCode, V2_MASTER_FIELD_ALIASES.building),
+        locationParts.bldg,
+        "N/A"
+    );
+    const production = v2FirstNonBlank(
+        v2ObjectValueByAliases(item, V2_MASTER_FIELD_ALIASES.production),
+        v2RawMasterValue(normalizedCode, V2_MASTER_FIELD_ALIASES.production),
+        locationParts.prod,
+        "N/A"
+    );
+
+    return {
+        name,
+        serialNo,
+        code: normalizedCode,
+        location,
+        building,
+        production
+    };
 }
 
 function showToast(message, type = "info", duration = 3600) {
@@ -843,6 +997,8 @@ function resetFilters() {
 function v2MatchesSearch(auditRecord, masterItem, search) {
     if (!search) return true;
 
+    const code = String(auditRecord?.barcode || "").trim().toUpperCase();
+    const exportFields = masterItem ? v2GetExportEquipmentFields(code, masterItem) : {};
     const values = [
         auditRecord?.barcode,
         auditRecord?.name,
@@ -856,10 +1012,11 @@ function v2MatchesSearch(auditRecord, masterItem, search) {
         auditRecord?.updatedDue,
         auditRecord?.updatedStatus,
         auditRecord?.isMissing ? "MISSING EQUIPMENT" : "",
-        masterItem?.name,
-        masterItem?.loc,
-        masterItem?.bldg,
-        masterItem?.prod,
+        exportFields.name,
+        exportFields.serialNo,
+        exportFields.location,
+        exportFields.building,
+        exportFields.production,
         masterItem?.due,
         masterItem?.status,
         masterItem?.msa
@@ -871,16 +1028,38 @@ function v2MatchesSearch(auditRecord, masterItem, search) {
 function v2MatchesMasterSearch(code, item, search) {
     if (!search) return true;
 
+    const exportFields = v2GetExportEquipmentFields(code, item);
+
     return [
-        code,
-        item?.name,
-        item?.loc,
-        item?.bldg,
-        item?.prod,
+        exportFields.code,
+        exportFields.name,
+        exportFields.serialNo,
+        exportFields.location,
+        exportFields.building,
+        exportFields.production,
         item?.due,
         item?.status,
         item?.msa
     ].some(value => String(value || "").toUpperCase().includes(search));
+}
+
+function v2GetFilteredAuditRecords(
+    filters = getSelectedFilterState(),
+    search = (v2El("globalSearch")?.value || "").trim().toUpperCase()
+) {
+    const includeUnregistered = !v2FilterHasStructuredSelection(filters);
+
+    return scanHistory.filter(record => {
+        const code = String(record.barcode || "").toUpperCase();
+        const masterItem = masterDB[code];
+
+        if (masterItem) {
+            return itemMatchesFilters(masterItem, filters) &&
+                v2MatchesSearch(record, masterItem, search);
+        }
+
+        return includeUnregistered && v2MatchesSearch(record, null, search);
+    });
 }
 
 function v2MsaRequired(value) {
@@ -914,18 +1093,7 @@ function updateDisplay() {
         return itemMatchesFilters(item, filters) && v2MatchesMasterSearch(code, item, search);
     });
 
-    const includeUnregistered = !v2FilterHasStructuredSelection(filters);
-
-    const filteredAuditResults = scanHistory.filter(record => {
-        const code = String(record.barcode || "").toUpperCase();
-        const masterItem = masterDB[code];
-
-        if (masterItem) {
-            return itemMatchesFilters(masterItem, filters) && v2MatchesSearch(record, masterItem, search);
-        }
-
-        return includeUnregistered && v2MatchesSearch(record, null, search);
-    });
+    const filteredAuditResults = v2GetFilteredAuditRecords(filters, search);
 
     const targetCodeSet = new Set(filteredTargetList);
     const scannedCodesInTarget = new Set();
@@ -2200,6 +2368,15 @@ function v2NormalizeCell(value) {
     return String(value ?? "").trim();
 }
 
+function v2FindHeaderColumn(normalizedHeader, aliases) {
+    for (const alias of aliases) {
+        const index = normalizedHeader.indexOf(v2NormalizeFieldKey(alias));
+        if (index >= 0) return index;
+    }
+
+    return -1;
+}
+
 async function loadMasterData(input) {
     const file = input?.files?.[0];
     if (!file) return;
@@ -2231,6 +2408,37 @@ async function loadMasterData(input) {
             throw new Error("The selected file is empty.");
         }
 
+        const normalizedHeader = (Array.isArray(rows[0]) ? rows[0] : [])
+            .map(v2NormalizeFieldKey);
+        const detectedIndexes = {
+            code: v2FindHeaderColumn(normalizedHeader, V2_MASTER_FIELD_ALIASES.code),
+            name: v2FindHeaderColumn(normalizedHeader, V2_MASTER_FIELD_ALIASES.name),
+            serialNo: v2FindHeaderColumn(normalizedHeader, V2_MASTER_FIELD_ALIASES.serialNo),
+            location: v2FindHeaderColumn(normalizedHeader, V2_MASTER_FIELD_ALIASES.location),
+            building: v2FindHeaderColumn(normalizedHeader, V2_MASTER_FIELD_ALIASES.building),
+            production: v2FindHeaderColumn(normalizedHeader, V2_MASTER_FIELD_ALIASES.production),
+            due: v2FindHeaderColumn(normalizedHeader, V2_MASTER_FIELD_ALIASES.due),
+            status: v2FindHeaderColumn(normalizedHeader, V2_MASTER_FIELD_ALIASES.status),
+            msa: v2FindHeaderColumn(normalizedHeader, V2_MASTER_FIELD_ALIASES.msa)
+        };
+        const usesMappedHeader = detectedIndexes.code >= 0 &&
+            (detectedIndexes.name >= 0 || detectedIndexes.location >= 0);
+        const indexes = usesMappedHeader
+            ? detectedIndexes
+            : {
+                code: 0,
+                name: 1,
+                serialNo: -1,
+                location: 2,
+                building: -1,
+                production: -1,
+                due: 3,
+                status: 4,
+                msa: 5
+            };
+        const sourceHasDueColumn = indexes.due >= 0;
+        const valueAt = (row, index) => index >= 0 ? v2NormalizeCell(row[index]) : "";
+
         const issues = [];
         const newMasterDB = {};
         const newRawRows = [[
@@ -2239,24 +2447,29 @@ async function loadMasterData(input) {
             "LOCATION",
             "DUE DATE",
             "STATUS",
-            "MSA"
+            "MSA",
+            "SERIAL NO"
         ]];
         const previewRows = [];
         const seenCodes = new Set();
         let duplicateCount = 0;
 
         rows.slice(1).forEach((sourceRow, rowIndex) => {
+            if (!Array.isArray(sourceRow)) return;
+
             const sourceLine = rowIndex + 2;
-            const values = Array.from({ length: 6 }, (_, index) => v2NormalizeCell(sourceRow[index]));
-            const rowIsEmpty = values.every(value => String(value ?? "").trim() === "");
+            const rowIsEmpty = sourceRow.every(value => String(value ?? "").trim() === "");
             if (rowIsEmpty) return;
 
-            const code = String(values[0] || "").trim().toUpperCase();
-            let name = String(values[1] || "").trim();
-            let location = String(values[2] || "").trim();
-            const rawDue = values[3];
-            let status = String(values[4] || "").trim();
-            let msa = String(values[5] || "").trim();
+            const code = String(valueAt(sourceRow, indexes.code) || "").trim().toUpperCase();
+            let name = String(valueAt(sourceRow, indexes.name) || "").trim();
+            let location = String(valueAt(sourceRow, indexes.location) || "").trim();
+            const serialNo = String(valueAt(sourceRow, indexes.serialNo) || "").trim();
+            const rawDue = valueAt(sourceRow, indexes.due);
+            let status = String(valueAt(sourceRow, indexes.status) || "").trim();
+            let msa = String(valueAt(sourceRow, indexes.msa) || "").trim();
+            const sourceBuilding = String(valueAt(sourceRow, indexes.building) || "").trim();
+            const sourceProduction = String(valueAt(sourceRow, indexes.production) || "").trim();
 
             if (!code) {
                 issues.push({ row: sourceLine, type: "Error", message: "Missing equipment code; row rejected." });
@@ -2283,21 +2496,26 @@ async function loadMasterData(input) {
             if (!status) status = "N/A";
             if (!msa) msa = "N/A";
 
-            const due = v2NormalizeImportDue(rawDue);
-            if (!due.valid) {
+            const due = sourceHasDueColumn
+                ? v2NormalizeImportDue(rawDue)
+                : { valid: true, due: "N/A", month: "N/A", year: "N/A" };
+            if (sourceHasDueColumn && !due.valid) {
                 issues.push({ row: sourceLine, type: "Warning", message: `${code}: ${due.reason}; set to N/A.` });
             }
 
             const locationParts = parseLocationParts(location);
-            const normalizedRow = [code, name, locationParts.loc, due.due, status, msa];
+            const building = sourceBuilding || locationParts.bldg;
+            const production = sourceProduction || locationParts.prod;
+            const normalizedRow = [code, name, locationParts.loc, due.due, status, msa, serialNo];
 
             newRawRows.push(normalizedRow);
             previewRows.push(normalizedRow);
             newMasterDB[code] = {
                 name,
+                serialNo,
                 loc: locationParts.loc,
-                bldg: locationParts.bldg,
-                prod: locationParts.prod,
+                bldg: building || "N/A",
+                prod: production || "N/A",
                 due: due.due,
                 status,
                 msa,
@@ -2471,6 +2689,197 @@ function v2ReportFiltersDescription(filters, search) {
     return parts.length ? parts.join(", ") : "All data";
 }
 
+function v2CsvSafeText(value) {
+    const text = String(value ?? "").replace(/\r\n?/g, "\n");
+    return /^[\t\n\r ]*[=+\-@]/.test(text) ? `'${text}` : text;
+}
+
+function v2CsvCell(value) {
+    return `"${v2CsvSafeText(value).replace(/"/g, '""')}"`;
+}
+
+function v2AuditRecency(record, fallbackOrder) {
+    const numericId = record?.id === null || record?.id === undefined || record?.id === ""
+        ? Number.NaN
+        : Number(record.id);
+    if (Number.isFinite(numericId)) return numericId;
+
+    const parsedDate = Date.parse(record?.editedAt || record?.time || "");
+    return Number.isFinite(parsedDate) ? parsedDate : fallbackOrder;
+}
+
+function v2BuildLatestAuditByCode() {
+    const latestAuditByCode = new Map();
+    const candidates = [
+        ...(Array.isArray(scanHistory) ? scanHistory : []),
+        ...(Array.isArray(pendingUploads) ? pendingUploads : [])
+    ];
+
+    candidates.forEach((record, index) => {
+        const code = String(record?.barcode || "").trim().toUpperCase();
+        if (!code) return;
+
+        const recency = v2AuditRecency(record, candidates.length - index);
+        const current = latestAuditByCode.get(code);
+
+        if (!current || recency > current.recency) {
+            latestAuditByCode.set(code, { record, recency });
+        }
+    });
+
+    return new Map(
+        Array.from(latestAuditByCode, ([code, value]) => [code, value.record])
+    );
+}
+
+function v2EquipmentExportStatus(latestAudit) {
+    if (!latestAudit) return "PENDING";
+
+    const locationResult = String(latestAudit.locRes || "").trim().toUpperCase();
+    return latestAudit.isMissing || locationResult === "MISSING" ? "MISSING" : "OK";
+}
+
+function v2GetOrderedMasterEquipment() {
+    const itemsByCode = new Map();
+
+    Object.entries(masterDB || {}).forEach(([key, item]) => {
+        const code = String(key || "").trim().toUpperCase();
+        if (code && !itemsByCode.has(code)) itemsByCode.set(code, item);
+    });
+
+    const orderedCodes = [];
+    const seenCodes = new Set();
+    const rawLookup = v2GetRawMasterLookup();
+
+    rawLookup.orderedCodes.forEach(code => {
+        if (!itemsByCode.has(code) || seenCodes.has(code)) return;
+        seenCodes.add(code);
+        orderedCodes.push(code);
+    });
+
+    Array.from(itemsByCode.keys())
+        .filter(code => !seenCodes.has(code))
+        .sort((a, b) => a.localeCompare(b, undefined, {
+            numeric: true,
+            sensitivity: "base"
+        }))
+        .forEach(code => orderedCodes.push(code));
+
+    return { itemsByCode, orderedCodes };
+}
+
+function v2BuildFilteredCsvData() {
+    const filters = getSelectedFilterState();
+    const search = (v2El("globalSearch")?.value || "").trim().toUpperCase();
+    const latestAuditByCode = v2BuildLatestAuditByCode();
+    const { itemsByCode, orderedCodes } = v2GetOrderedMasterEquipment();
+    const header = [
+        "EquipName",
+        "EquipCode",
+        "LocationName",
+        "Building",
+        "ProdType",
+        "Status"
+    ];
+    const rows = [];
+    const statusCounts = { OK: 0, MISSING: 0, PENDING: 0 };
+
+    orderedCodes.forEach(code => {
+        const item = itemsByCode.get(code);
+        if (!item || !itemMatchesFilters(item, filters)) return;
+
+        const fields = v2GetExportEquipmentFields(code, item);
+        const status = v2EquipmentExportStatus(latestAuditByCode.get(code));
+        const searchValues = [
+            fields.name,
+            fields.code,
+            fields.location,
+            fields.building,
+            fields.production,
+            status,
+            item?.due,
+            item?.status,
+            item?.msa
+        ];
+
+        if (search && !searchValues.some(value => {
+            return String(value || "").toUpperCase().includes(search);
+        })) {
+            return;
+        }
+
+        statusCounts[status] += 1;
+        rows.push([
+            fields.name,
+            fields.code,
+            fields.location,
+            fields.building,
+            fields.production,
+            status
+        ]);
+    });
+
+    return { header, rows, filters, search, statusCounts };
+}
+
+function v2DownloadCsv(rows, filename) {
+    const csv = rows.map(row => row.map(v2CsvCell).join(",")).join("\r\n");
+    const blob = new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" });
+
+    if (typeof navigator !== "undefined" && typeof navigator.msSaveBlob === "function") {
+        navigator.msSaveBlob(blob, filename);
+        return;
+    }
+
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.hidden = true;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function exportFilteredCsv() {
+    try {
+        if (Object.keys(masterDB || {}).length === 0) {
+            showToast("No master equipment records are available to export.", "warning", 4200);
+            return;
+        }
+
+        const data = v2BuildFilteredCsvData();
+
+        if (data.rows.length === 0) {
+            showToast("No equipment matches the current filters.", "warning", 4200);
+            return;
+        }
+
+        const scope = v2Slug(
+            data.filters.buildings?.[0] ||
+            data.filters.productions?.[0] ||
+            data.filters.statuses?.[0] ||
+            data.search ||
+            "filtered"
+        );
+        const filename = `Calibration_Equipment_Status_${scope}_${v2TimestampForFilename()}.csv`;
+
+        v2DownloadCsv([data.header, ...data.rows], filename);
+        showToast(
+            `CSV created: ${data.rows.length} equipment (` +
+            `${data.statusCounts.OK} OK, ` +
+            `${data.statusCounts.MISSING} MISSING, ` +
+            `${data.statusCounts.PENDING} PENDING).`,
+            "success",
+            5200
+        );
+    } catch (error) {
+        console.error("CSV generation failed", error);
+        showToast(`CSV generation failed: ${error.message || "Unknown error"}`, "error", 5200);
+    }
+}
+
 function v2BuildReportData(useFilters) {
     const filters = useFilters ? getSelectedFilterState() : {
         buildings: [],
@@ -2607,7 +3016,7 @@ function v2BuildReportData(useFilters) {
     const completion = totalMaster ? `${Math.round((scanned / totalMaster) * 100)}%` : "0%";
 
     const summaryRows = [
-        ["GRID V2.3 CALIBRATION AUDIT REPORT"],
+        ["GRID V2.5 CALIBRATION AUDIT REPORT"],
         ["Generated", new Date().toLocaleString("en-MY")],
         ["Generated by", loggedInUser || "Unknown"],
         ["Scope", v2ReportFiltersDescription(filters, search)],
