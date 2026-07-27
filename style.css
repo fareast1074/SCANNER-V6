@@ -9,6 +9,8 @@
     --danger-soft: #ffebee;
     --warning: #f9a825;
     --warning-soft: #fff8e1;
+    --missing: #6a1b9a;
+    --missing-soft: #f3e5f5;
     --info: #1565c0;
     --info-soft: #e3f2fd;
     --bg: #f7f3ed;
@@ -622,7 +624,7 @@ button:disabled {
 
 .stats-bar {
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
     gap: 10px;
     margin-bottom: 18px;
 }
@@ -647,6 +649,7 @@ button:disabled {
 
 .stat-pass { border-top-color: var(--success); }
 .stat-fail { border-top-color: var(--danger); }
+.stat-missing { border-top-color: var(--missing); }
 .stat-pending { border-top-color: var(--warning); }
 .stat-unregistered { border-top-color: var(--info); }
 
@@ -659,6 +662,7 @@ button:disabled {
 
 .stat-pass .stat-val { color: var(--success); }
 .stat-fail .stat-val { color: var(--danger); }
+.stat-missing .stat-val { color: var(--missing); }
 .stat-pending .stat-val { color: #b26a00; }
 .stat-unregistered .stat-val { color: var(--info); }
 
@@ -1062,6 +1066,10 @@ tbody tr:hover {
     background: rgba(211, 47, 47, 0.045);
 }
 
+.row-missing {
+    background: rgba(106, 27, 154, 0.055);
+}
+
 .row-unregistered {
     background: rgba(21, 101, 192, 0.045);
 }
@@ -1087,6 +1095,11 @@ tbody tr:hover {
 .pill-fail {
     background: var(--danger-soft);
     color: var(--danger);
+}
+
+.pill-missing {
+    background: var(--missing-soft);
+    color: var(--missing);
 }
 
 .pill-neutral {
@@ -1707,10 +1720,6 @@ tbody tr:hover {
         grid-template-columns: repeat(3, 1fr);
     }
 
-    .stat-card:nth-child(4),
-    .stat-card:nth-child(5) {
-        grid-column: span 1;
-    }
 }
 
 /* Mobile card tables */
@@ -1783,7 +1792,7 @@ tbody tr:hover {
     }
 
     .stat-card:last-child {
-        grid-column: 1 / -1;
+        grid-column: auto;
     }
 
     .load-zone {
@@ -1871,6 +1880,10 @@ tbody tr:hover {
 
     .table-container tr.row-fail {
         border-left-color: var(--danger);
+    }
+
+    .table-container tr.row-missing {
+        border-left-color: var(--missing);
     }
 
     .table-container tr.row-unregistered {

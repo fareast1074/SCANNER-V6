@@ -1,5 +1,5 @@
 /*
- * GRID Calibration Inventory System - V2.5 experience layer
+ * GRID Calibration Inventory System - V2.7 experience layer
  *
  * This file intentionally keeps the existing Firebase Realtime Database paths
  * and record shape used by script.js. It upgrades the scanning workflow,
@@ -940,7 +940,7 @@ function itemMatchesFilters(item, filters) {
 }
 
 function setQuickView(view) {
-    const allowed = new Set(["all", "abnormal", "passed", "mine", "unregistered", "pending"]);
+    const allowed = new Set(["all", "abnormal", "missing", "passed", "mine", "unregistered", "pending"]);
     v2QuickView = allowed.has(view) ? view : "all";
     v2AuditLimit = 200;
 
@@ -1011,7 +1011,8 @@ function v2MatchesSearch(auditRecord, masterItem, search) {
         auditRecord?.updatedLocation,
         auditRecord?.updatedDue,
         auditRecord?.updatedStatus,
-        auditRecord?.isMissing ? "MISSING EQUIPMENT" : "",
+        auditRecord?.auditStatus,
+        v2IsMissingAudit(auditRecord) ? "MISSING EQUIPMENT" : "",
         exportFields.name,
         exportFields.serialNo,
         exportFields.location,
@@ -1062,6 +1063,33 @@ function v2GetFilteredAuditRecords(
     });
 }
 
+function v2IsMissingAudit(record) {
+    return Boolean(
+        record?.isMissing ||
+        String(record?.locRes || "").trim().toUpperCase() === "MISSING" ||
+        String(record?.auditStatus || "").trim().toUpperCase() === "MISSING"
+    );
+}
+
+function v2AuditCategory(record) {
+    if (v2IsMissingAudit(record)) return "MISSING";
+
+    const storedStatus = String(record?.auditStatus || "").trim().toUpperCase();
+    if (record?.isFail || ["ABNORMAL", "FAIL", "FAILED"].includes(storedStatus)) {
+        return "ABNORMAL";
+    }
+
+    return "PASS";
+}
+
+function v2IsAbnormalAudit(record) {
+    return v2AuditCategory(record) === "ABNORMAL";
+}
+
+function v2IsPassedAudit(record) {
+    return v2AuditCategory(record) === "PASS";
+}
+
 function v2MsaRequired(value) {
     const normalized = String(value || "").trim().toUpperCase();
     return ["YES", "Y", "REQUIRED", "TRUE", "1"].includes(normalized);
@@ -1074,11 +1102,14 @@ function v2AuditPassesMsa(record, masterItem) {
 
 function v2Pill(value, passValues = [], neutralValues = []) {
     const normalized = String(value || "N/A");
-    const cssClass = passValues.includes(normalized)
-        ? "pill-pass"
-        : neutralValues.includes(normalized)
-            ? "pill-neutral"
-            : "pill-fail";
+    const normalizedUpper = normalized.trim().toUpperCase();
+    const cssClass = normalizedUpper === "MISSING"
+        ? "pill-missing"
+        : passValues.includes(normalized)
+            ? "pill-pass"
+            : neutralValues.includes(normalized)
+                ? "pill-neutral"
+                : "pill-fail";
 
     return `<span class="status-pill ${cssClass}">${escapeHtml(normalized)}</span>`;
 }
@@ -1111,8 +1142,9 @@ function updateDisplay() {
     v2SetText("progressSubLabel", `Scanned: ${scannedInTarget} / ${filteredTargetList.length}`);
     drawGauge(completion);
 
-    const failedItems = filteredAuditResults.filter(record => record.isFail);
-    const passedItems = filteredAuditResults.filter(record => !record.isFail);
+    const missingItems = filteredAuditResults.filter(v2IsMissingAudit);
+    const failedItems = filteredAuditResults.filter(v2IsAbnormalAudit);
+    const passedItems = filteredAuditResults.filter(v2IsPassedAudit);
     const unregisteredItems = filteredAuditResults.filter(record => {
         return !masterDB[String(record.barcode || "").toUpperCase()];
     });
@@ -1122,6 +1154,7 @@ function updateDisplay() {
     v2SetText("totalScans", filteredAuditResults.length);
     v2SetText("totalPassed", passedItems.length);
     v2SetText("totalFails", failedItems.length);
+    v2SetText("totalMissing", missingItems.length);
     v2SetText("totalNotScanned", Math.max(filteredTargetList.length - scannedInTarget, 0));
     v2SetText("totalUnregistered", unregisteredItems.length);
     v2UpdatePendingBadge();
@@ -1129,9 +1162,11 @@ function updateDisplay() {
     let visibleAuditResults = filteredAuditResults;
 
     if (v2QuickView === "abnormal") {
-        visibleAuditResults = visibleAuditResults.filter(record => record.isFail);
+        visibleAuditResults = visibleAuditResults.filter(v2IsAbnormalAudit);
+    } else if (v2QuickView === "missing") {
+        visibleAuditResults = visibleAuditResults.filter(v2IsMissingAudit);
     } else if (v2QuickView === "passed") {
-        visibleAuditResults = visibleAuditResults.filter(record => !record.isFail);
+        visibleAuditResults = visibleAuditResults.filter(v2IsPassedAudit);
     } else if (v2QuickView === "mine") {
         visibleAuditResults = visibleAuditResults.filter(record => record.pic === loggedInUser);
     } else if (v2QuickView === "unregistered") {
@@ -1159,15 +1194,18 @@ function updateDisplay() {
             const code = String(record.barcode || "").toUpperCase();
             const masterItem = masterDB[code];
             const originalStatus = masterItem?.status || "N/A";
-            const rowClass = !masterItem
-                ? "row-unregistered"
-                : record.isFail
-                    ? "row-fail"
-                    : "";
+            const auditCategory = v2AuditCategory(record);
+            const rowClass = auditCategory === "MISSING"
+                ? "row-missing"
+                : !masterItem
+                    ? "row-unregistered"
+                    : auditCategory === "ABNORMAL"
+                        ? "row-fail"
+                        : "";
             const key = v2SafeActionValue(record.cloudId || record.id || record.barcode || "");
             const msaPassValues = v2AuditPassesMsa(record, masterItem) ? [record.msaRes] : [];
             const msaNeutralValues = record.msaRes === "N/A" ? ["N/A"] : [];
-            const statusDisplay = record.isMissing || record.locRes === "MISSING"
+            const statusDisplay = auditCategory === "MISSING"
                 ? `${v2Pill("MISSING")}<small class="master-status-note">Master: ${escapeHtml(originalStatus)}</small>`
                 : escapeHtml(originalStatus);
 
@@ -1309,7 +1347,6 @@ function animateGauge() {
 
 function updateFailureChart(failedItems) {
     const counts = {
-        "Missing equipment": 0,
         "Wrong location": 0,
         "Wrong sticker location": 0,
         "Expired due": 0,
@@ -1321,13 +1358,10 @@ function updateFailureChart(failedItems) {
     };
 
     failedItems.forEach(record => {
+        if (v2IsMissingAudit(record)) return;
+
         const masterItem = masterDB[String(record.barcode || "").toUpperCase()];
         let categorized = false;
-
-        if (record.isMissing || record.locRes === "MISSING") {
-            counts["Missing equipment"] += 1;
-            return;
-        }
 
         if (record.locRes === "WRONG") {
             counts["Wrong location"] += 1;
@@ -1369,7 +1403,7 @@ function updateFailureChart(failedItems) {
 
     const labels = Object.keys(counts).filter(label => counts[label] > 0);
     const data = labels.map(label => counts[label]);
-    const colors = ["#b71c1c", "#d32f2f", "#c62828", "#f57c00", "#f9a825", "#7b1fa2", "#5d4037", "#1565c0", "#795548"];
+    const colors = ["#d32f2f", "#c62828", "#f57c00", "#f9a825", "#7b1fa2", "#5d4037", "#1565c0", "#795548"];
     const canvas = v2El("failureChart");
     const legend = v2El("failureLegend");
 
@@ -1381,7 +1415,7 @@ function updateFailureChart(failedItems) {
             failureChartInstance = null;
         }
         canvas.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
-        if (legend) legend.textContent = "No failures detected.";
+        if (legend) legend.textContent = "No abnormal conditions detected.";
         return;
     }
 
@@ -1642,12 +1676,13 @@ function renderQCModal(auditRecord = null) {
     const safeMsa = escapeHtml(currentItem.msa || "N/A");
     const editDisabled = currentItem.isUnregistered ? "disabled" : "";
 
-    const recordIsMissing = Boolean(auditRecord && (auditRecord.isMissing || auditRecord.locRes === "MISSING"));
+    const auditCategory = auditRecord ? v2AuditCategory(auditRecord) : "";
+    const recordIsMissing = auditCategory === "MISSING";
     const detailMeta = isEditMode ? `
         <div class="scan-detail-meta">
             <div><span>Scanned time</span><strong>${escapeHtml(auditRecord.time || "-")}</strong></div>
             <div><span>Scanned by</span><strong>${escapeHtml(auditRecord.pic || "-")}</strong></div>
-            <div><span>Audit result</span><strong>${recordIsMissing ? "MISSING" : auditRecord.isFail ? "FAIL" : "PASS"}</strong></div>
+            <div><span>Audit result</span><strong>${auditCategory}</strong></div>
             <div><span>Recorded equipment status</span><strong>${escapeHtml(auditRecord.updatedStatus || currentItem.status || "N/A")}</strong></div>
         </div>
     ` : "";
@@ -1823,7 +1858,7 @@ async function v2SaveAuditRecord({ isMissing = false } = {}) {
             : remarkValue || generatedRemarks.join("; ") || "-";
         const msaFailed = !isMissing && v2MsaRequired(currentItem.msa) && selectedMsa !== "YES";
 
-        const failed = isMissing ||
+        const abnormal = !isMissing && (
             selectedLoc === "WRONG" ||
             selectedStickerLoc === "WRONG" ||
             selectedDue !== "VALID" ||
@@ -1831,7 +1866,8 @@ async function v2SaveAuditRecord({ isMissing = false } = {}) {
             currentItem.isUnregistered ||
             savedMasterLocationUpdated ||
             savedMasterDueUpdated ||
-            savedMasterStatusUpdated;
+            savedMasterStatusUpdated
+        );
 
         const now = new Date();
         const dateTimeString = now.toLocaleDateString("en-GB") + " " + now.toLocaleTimeString([], {
@@ -1856,12 +1892,15 @@ async function v2SaveAuditRecord({ isMissing = false } = {}) {
             masterDueUpdated: savedMasterDueUpdated,
             masterStatusUpdated: savedMasterStatusUpdated,
             remark: finalRemark,
-            isFail: failed,
+            isFail: abnormal,
             isMissing,
+            auditStatus: isMissing ? "MISSING" : abnormal ? "ABNORMAL" : "PASS",
             isUnregistered: currentItem.isUnregistered
         };
 
-        const resultText = isMissing ? "missing" : failed ? "abnormal" : "pass";
+        const resultText = isMissing ? "missing" : abnormal ? "abnormal" : "pass";
+        const resultToastType = isMissing || abnormal ? "warning" : "success";
+        const feedbackType = isMissing ? "info" : abnormal ? "fail" : "pass";
 
         if (isEditMode) {
             if (existingRecord.cloudId) auditData.cloudId = existingRecord.cloudId;
@@ -1869,13 +1908,13 @@ async function v2SaveAuditRecord({ isMissing = false } = {}) {
             auditData.editedAt = dateTimeString;
             await saveEditedAuditRecord(auditData);
             v2SetLastScan(auditData.barcode, `Updated - ${resultText}`);
-            showToast(isMissing ? "Equipment remains marked as missing." : "Audit record updated.", failed ? "warning" : "success");
+            showToast(isMissing ? "Equipment remains marked as missing." : "Audit record updated.", resultToastType);
         } else if (isOnline) {
             const newRef = db.ref("audit_history").push();
             auditData.cloudId = newRef.key;
             await newRef.set(auditData);
             v2SetLastScan(auditData.barcode, `Saved - ${resultText}`);
-            showToast(isMissing ? "Equipment marked as missing." : failed ? "Abnormal audit record saved." : "Audit record saved.", failed ? "warning" : "success");
+            showToast(isMissing ? "Equipment marked as missing." : abnormal ? "Abnormal audit record saved." : "Audit record saved.", resultToastType);
         } else {
             pendingUploads.push(auditData);
             localStorage.setItem("pending_queue", JSON.stringify(pendingUploads));
@@ -1886,7 +1925,7 @@ async function v2SaveAuditRecord({ isMissing = false } = {}) {
             showToast(isMissing ? "Offline: missing record queued for synchronization." : "Offline: audit record queued for synchronization.", "warning");
         }
 
-        v2Feedback(failed ? "fail" : "pass");
+        v2Feedback(feedbackType);
         closeModal();
     } catch (error) {
         console.error("Unable to save audit record", error);
@@ -2734,9 +2773,7 @@ function v2BuildLatestAuditByCode() {
 
 function v2EquipmentExportStatus(latestAudit) {
     if (!latestAudit) return "PENDING";
-
-    const locationResult = String(latestAudit.locRes || "").trim().toUpperCase();
-    return latestAudit.isMissing || locationResult === "MISSING" ? "MISSING" : "OK";
+    return v2IsMissingAudit(latestAudit) ? "MISSING" : "OK";
 }
 
 function v2GetOrderedMasterEquipment() {
@@ -2775,6 +2812,7 @@ function v2BuildFilteredCsvData() {
     const { itemsByCode, orderedCodes } = v2GetOrderedMasterEquipment();
     const header = [
         "EquipName",
+        "SerialNo",
         "EquipCode",
         "LocationName",
         "Building",
@@ -2792,6 +2830,7 @@ function v2BuildFilteredCsvData() {
         const status = v2EquipmentExportStatus(latestAuditByCode.get(code));
         const searchValues = [
             fields.name,
+            fields.serialNo,
             fields.code,
             fields.location,
             fields.building,
@@ -2811,6 +2850,7 @@ function v2BuildFilteredCsvData() {
         statusCounts[status] += 1;
         rows.push([
             fields.name,
+            fields.serialNo,
             fields.code,
             fields.location,
             fields.building,
@@ -2919,6 +2959,7 @@ function v2BuildReportData(useFilters) {
     const allRows = [header];
     const passedRows = [header];
     const abnormalRows = [header];
+    const missingRows = [header];
     const pendingRows = [header];
 
     Object.keys(masterDB).sort().forEach(code => {
@@ -2930,9 +2971,12 @@ function v2BuildReportData(useFilters) {
         let row;
 
         if (audit) {
+            const auditCategory = v2AuditCategory(audit);
+            const reportStatus = auditCategory === "ABNORMAL" ? "FAIL" : auditCategory;
+
             row = [
                 ...base,
-                audit.isMissing || audit.locRes === "MISSING" ? "MISSING" : audit.isFail ? "FAIL" : "PASS",
+                reportStatus,
                 audit.time || "",
                 audit.pic || "",
                 audit.locRes || "",
@@ -2941,7 +2985,14 @@ function v2BuildReportData(useFilters) {
                 audit.msaRes || "",
                 audit.remark || ""
             ];
-            (audit.isFail ? abnormalRows : passedRows).push(row);
+
+            if (auditCategory === "MISSING") {
+                missingRows.push(row);
+            } else if (auditCategory === "ABNORMAL") {
+                abnormalRows.push(row);
+            } else {
+                passedRows.push(row);
+            }
         } else {
             row = [...base, "PENDING", "", "", "", "", "", "", ""];
             pendingRows.push(row);
@@ -2956,6 +3007,7 @@ function v2BuildReportData(useFilters) {
         if (masterDB[code]) return;
         if (useFilters && (v2FilterHasStructuredSelection(filters) || !v2MatchesSearch(record, null, search))) return;
 
+        const auditCategory = v2AuditCategory(record);
         unregisteredRows.push([
             record.barcode || "",
             record.name || "UNREGISTERED",
@@ -2963,7 +3015,7 @@ function v2BuildReportData(useFilters) {
             "N/A",
             "UNREGISTERED",
             "N/A",
-            record.isMissing || record.locRes === "MISSING" ? "MISSING" : "FAIL",
+            auditCategory === "MISSING" ? "MISSING" : "FAIL",
             record.time || "",
             record.pic || "",
             record.locRes || "",
@@ -2975,48 +3027,55 @@ function v2BuildReportData(useFilters) {
     });
 
     const auditorMap = new Map();
+    const ensureAuditor = auditor => {
+        if (!auditorMap.has(auditor)) {
+            auditorMap.set(auditor, { total: 0, passed: 0, abnormal: 0, missing: 0 });
+        }
+        return auditorMap.get(auditor);
+    };
+
     allRows.slice(1).forEach(row => {
         const auditor = row[8];
         const auditStatus = row[6];
         if (!auditor || auditStatus === "PENDING") return;
 
-        if (!auditorMap.has(auditor)) {
-            auditorMap.set(auditor, { total: 0, passed: 0, abnormal: 0 });
-        }
-
-        const stats = auditorMap.get(auditor);
+        const stats = ensureAuditor(auditor);
         stats.total += 1;
         if (auditStatus === "PASS") stats.passed += 1;
-        if (auditStatus !== "PASS") stats.abnormal += 1;
+        if (auditStatus === "FAIL") stats.abnormal += 1;
+        if (auditStatus === "MISSING") stats.missing += 1;
     });
 
     unregisteredRows.slice(1).forEach(row => {
         const auditor = row[8] || "Unknown";
-        if (!auditorMap.has(auditor)) auditorMap.set(auditor, { total: 0, passed: 0, abnormal: 0 });
-        const stats = auditorMap.get(auditor);
+        const stats = ensureAuditor(auditor);
         stats.total += 1;
-        stats.abnormal += 1;
+        if (row[6] === "MISSING") {
+            stats.missing += 1;
+        } else {
+            stats.abnormal += 1;
+        }
     });
 
-    const auditorRows = [["AUDITOR", "TOTAL SCANS", "PASSED", "ABNORMAL", "PASS RATE"]];
+    const auditorRows = [["AUDITOR", "TOTAL SCANS", "PASSED", "ABNORMAL", "MISSING", "PASS RATE"]];
     Array.from(auditorMap.entries())
         .sort((a, b) => b[1].total - a[1].total)
         .forEach(([auditor, stats]) => {
             const passRate = stats.total ? `${Math.round((stats.passed / stats.total) * 100)}%` : "0%";
-            auditorRows.push([auditor, stats.total, stats.passed, stats.abnormal, passRate]);
+            auditorRows.push([auditor, stats.total, stats.passed, stats.abnormal, stats.missing, passRate]);
         });
 
     const totalMaster = allRows.length - 1;
     const passed = passedRows.length - 1;
     const abnormal = abnormalRows.length - 1;
+    const missing = missingRows.length - 1;
     const pending = pendingRows.length - 1;
     const unregistered = unregisteredRows.length - 1;
-    const missing = allRows.slice(1).filter(row => row[6] === "MISSING").length;
-    const scanned = passed + abnormal;
+    const scanned = passed + abnormal + missing;
     const completion = totalMaster ? `${Math.round((scanned / totalMaster) * 100)}%` : "0%";
 
     const summaryRows = [
-        ["GRID V2.5 CALIBRATION AUDIT REPORT"],
+        ["GRID V2.7 CALIBRATION AUDIT REPORT"],
         ["Generated", new Date().toLocaleString("en-MY")],
         ["Generated by", loggedInUser || "Unknown"],
         ["Scope", v2ReportFiltersDescription(filters, search)],
@@ -3037,6 +3096,7 @@ function v2BuildReportData(useFilters) {
         allRows,
         passedRows,
         abnormalRows,
+        missingRows,
         pendingRows,
         unregisteredRows,
         auditorRows,
@@ -3060,9 +3120,10 @@ function v2WriteReport(useFilters) {
         XLSX.utils.book_append_sheet(workbook, v2Worksheet(report.allRows, dataWidths), "All Equipment");
         XLSX.utils.book_append_sheet(workbook, v2Worksheet(report.passedRows, dataWidths), "Passed");
         XLSX.utils.book_append_sheet(workbook, v2Worksheet(report.abnormalRows, dataWidths), "Abnormal");
+        XLSX.utils.book_append_sheet(workbook, v2Worksheet(report.missingRows, dataWidths), "Missing");
         XLSX.utils.book_append_sheet(workbook, v2Worksheet(report.pendingRows, dataWidths), "Pending");
         XLSX.utils.book_append_sheet(workbook, v2Worksheet(report.unregisteredRows, dataWidths), "Unregistered");
-        XLSX.utils.book_append_sheet(workbook, v2Worksheet(report.auditorRows, [24, 14, 12, 14, 12]), "Auditor Summary");
+        XLSX.utils.book_append_sheet(workbook, v2Worksheet(report.auditorRows, [24, 14, 12, 14, 12, 12]), "Auditor Summary");
 
         const scope = useFilters
             ? v2Slug(

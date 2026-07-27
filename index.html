@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#5d4037">
     <meta name="description" content="Scanner-first calibration inventory audit system">
-    <title>GRID V2.5 | Calibration Inventory System</title>
+    <title>GRID V2.7 | Calibration Inventory System</title>
     <link rel="manifest" href="manifest.json">
     <link rel="icon" href="icon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="style.css">
@@ -28,7 +28,7 @@
     <div id="loginOverlay">
         <div class="login-card">
             <div class="scanner-line"></div>
-            <div class="login-kicker">GRID V2.5 | Dev by F4REAST </div>
+            <div class="login-kicker">GRID V2.7 | Dev by F4REAST </div>
             <div class="glitch-title">INVENTORY SYSTEM</div>
             <label class="sr-only" for="username">Name</label>
             <input type="text" id="username" placeholder="Name" autocomplete="username">
@@ -142,6 +142,10 @@
             <button class="stat-card stat-fail" onclick="setQuickView('abnormal')">
                 <span id="totalFails" class="stat-val">0</span>
                 <span class="stat-lbl">Abnormal</span>
+            </button>
+            <button class="stat-card stat-missing" onclick="setQuickView('missing')">
+                <span id="totalMissing" class="stat-val">0</span>
+                <span class="stat-lbl">Missing</span>
             </button>
             <button class="stat-card stat-pending" onclick="setQuickView('pending')">
                 <span id="totalNotScanned" class="stat-val">0</span>
@@ -315,6 +319,7 @@
         <nav class="quick-filter-bar" aria-label="Quick views">
             <button class="quick-filter active" data-view="all" onclick="setQuickView('all')">All scans</button>
             <button class="quick-filter" data-view="abnormal" onclick="setQuickView('abnormal')">Abnormal</button>
+            <button class="quick-filter" data-view="missing" onclick="setQuickView('missing')">Missing</button>
             <button class="quick-filter" data-view="passed" onclick="setQuickView('passed')">Passed</button>
             <button class="quick-filter" data-view="mine" onclick="setQuickView('mine')">My scans</button>
             <button class="quick-filter" data-view="unregistered" onclick="setQuickView('unregistered')">Unregistered</button>
