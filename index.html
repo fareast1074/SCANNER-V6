@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#5d4037">
     <meta name="description" content="Scanner-first calibration inventory audit system">
-    <title>GRID V2.7 | Calibration Inventory System</title>
+    <title>GRID V2.9 | Calibration Inventory System</title>
     <link rel="manifest" href="manifest.json">
     <link rel="icon" href="icon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="style.css">
@@ -28,7 +28,7 @@
     <div id="loginOverlay">
         <div class="login-card">
             <div class="scanner-line"></div>
-            <div class="login-kicker">GRID V2.7 | Dev by F4REAST </div>
+            <div class="login-kicker">GRID V2.9 | Dev by F4REAST </div>
             <div class="glitch-title">INVENTORY SYSTEM</div>
             <label class="sr-only" for="username">Name</label>
             <input type="text" id="username" placeholder="Name" autocomplete="username">
@@ -44,14 +44,17 @@
                 <div id="syncStatus" class="connection-dot" title="Cloud connection status"></div>
                 <div>
                     <span class="eyebrow">SIGNED IN</span>
-                    <strong id="userDisp">-</strong>
+                    <div class="signed-in-line">
+                        <strong id="userDisp">-</strong>
+                        <span id="accessModeBadge" class="access-mode-badge" aria-live="polite">MODE</span>
+                    </div>
                 </div>
                 <span id="syncStatusText" class="connection-label">Connecting...</span>
                 <span id="pendingSyncBadge" class="sync-badge">0 pending</span>
             </div>
             <div class="header-actions">
-                <button onclick="clearAllCloudData()" class="btn-danger-ghost">Clear Cloud</button>
-                <button onclick="logout()" class="btn-logout">Logout &amp; Clear</button>
+                <button id="clearCloudButton" onclick="clearAllCloudData()" class="btn-danger-ghost developer-only" hidden>Clear Cloud</button>
+                <button id="logoutButton" onclick="logout()" class="btn-logout">Logout</button>
             </div>
         </header>
 
@@ -335,7 +338,7 @@
                 <table>
                     <thead>
                         <tr>
-                            <th>Time</th><th>Code</th><th>Name</th><th>PIC</th><th>Actual Location </th><th>Location on Sticker </th><th>Due</th><th>Status</th><th>MSA</th><th>Remark</th><th>Action</th>
+                            <th>Time</th><th>Code</th><th>Name</th><th>PIC</th><th>Physical Loc.</th><th>Sticker Loc.</th><th>Due</th><th>Status</th><th>MSA</th><th>Remark</th><th>Action</th>
                         </tr>
                     </thead>
                     <tbody id="inventoryBody"></tbody>
@@ -382,7 +385,7 @@
                 <div class="audit-grid">
                     <div class="audit-row">
                         <div class="audit-label-wrap">
-                            <label>Actual Location</label>
+                            <label>Physical Location</label>
                             <small>Is the equipment at its registered location?</small>
                         </div>
                         <div class="option-group">

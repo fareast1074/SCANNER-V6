@@ -298,6 +298,44 @@ button:disabled {
     font-weight: 800;
 }
 
+.signed-in-line {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.access-mode-badge {
+    display: inline-flex;
+    align-items: center;
+    min-height: 22px;
+    padding: 3px 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    background: #f5f1ed;
+    color: var(--text-muted);
+    font-size: 0.66rem;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    white-space: nowrap;
+}
+
+.access-mode-badge.user {
+    border-color: rgba(25, 118, 210, 0.28);
+    background: rgba(25, 118, 210, 0.08);
+    color: #1565c0;
+}
+
+.access-mode-badge.developer {
+    border-color: rgba(123, 31, 162, 0.28);
+    background: rgba(123, 31, 162, 0.09);
+    color: #6a1b9a;
+}
+
+.developer-only[hidden] {
+    display: none !important;
+}
+
 .btn-logout,
 .btn-danger-ghost,
 .btn-secondary,
@@ -317,6 +355,11 @@ button:disabled {
     padding: 9px 13px;
     border: 1px solid var(--primary);
     color: var(--primary);
+}
+
+.btn-logout.logout-clear-mode {
+    border-color: var(--danger);
+    color: var(--danger);
 }
 
 .btn-danger-ghost {
@@ -1742,6 +1785,10 @@ tbody tr:hover {
     .header-actions {
         display: grid;
         grid-template-columns: 1fr 1fr;
+    }
+
+    body[data-access-mode="user"] .header-actions {
+        grid-template-columns: 1fr;
     }
 
     .btn-logout,

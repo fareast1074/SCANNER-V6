@@ -1,4 +1,4 @@
-const CACHE_NAME = "grid-v2-7-shell-1";
+const CACHE_NAME = "grid-v2-9-shell-1";
 const APP_SHELL = [
     "./",
     "./index.html",

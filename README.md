@@ -1,4 +1,4 @@
-# GRID V2.7 Calibration Inventory System
+# GRID V2.9 Calibration Inventory System
 
 This package upgrades the original browser application while retaining its existing Firebase Realtime Database configuration and paths. New audit fields are optional, so existing records remain readable.
 
@@ -26,13 +26,17 @@ This package upgrades the original browser application while retaining its exist
 - Pagination-style limiting for large audit histories and batched pending display.
 - Toast notifications, loading states, empty states, keyboard shortcuts, and accessible labels.
 - Installable app manifest and a same-origin app-shell service worker.
+- Password-based operating modes:
+  - `1234` opens **User Mode**. Users can scan, review, and delete individual audit records. `Clear Cloud` and logout-with-clear remain unavailable. The header shows only a normal **Logout** action, which preserves all remaining cloud history and the device's pending scan queue.
+  - `1074` opens **Developer Mode** with full controls, including individual audit-record deletion, `Clear Cloud`, and **Logout & Clear**.
+- Bulk cloud clearing functions still verify Developer Mode internally, while individual audit-record deletion is available to both authenticated modes and retains its confirmation prompt.
 
 ## Files
 
 - `index.html` — application markup and unchanged Firebase project configuration.
 - `script.js` — original application/database logic.
-- `enhancements.js` — V2.7 workflow, interface, import, scanner, and reporting upgrades.
-- `style.css` — complete responsive V2.7 styling.
+- `enhancements.js` — V2.9 workflow, interface, import, scanner, access-mode, and reporting upgrades.
+- `style.css` — complete responsive V2.9 styling.
 - `manifest.json`, `icon.svg`, `sw.js` — installable app shell.
 - `sample_master.csv` — example import file with an optional serial-number column and a quoted equipment name containing a comma.
 
@@ -80,7 +84,8 @@ When Due Date or MSA is not present, the imported value is stored as `N/A`. Supp
 
 - The app still loads Html5Qrcode, SheetJS, Chart.js, and Firebase compatibility libraries from their existing CDNs.
 - Firebase paths remain `audit_history`, `master_list`, and `temporary_locks`.
-- Existing `Clear Cloud` and `Logout & Clear` behavior in `script.js` remains unchanged.
+- User Mode can delete one selected audit record at a time after confirmation, but it cannot use `Clear Cloud` or `Logout & Clear`. A normal User Mode logout does not delete cloud data, temporary locks, or pending scans. Developer Mode retains the bulk-destructive controls with explicit confirmation prompts.
+- These two passwords are implemented in the standalone browser code. They are suitable for workflow separation and accidental-deletion prevention, but they are not a substitute for server-side authentication or Firebase Security Rules.
 - Existing audit records without `stickerLocRes` display `N/A`; opening one for editing requires completing the new sticker-location check.
 - The filtered CSV uses the Search, Building, Production, Due Month, Due Year, and Equipment Status controls and exports one row per matching registered equipment. Unregistered scans are not included.
 - `SerialNo` is read from the master record or a recognized serial-number column. It remains blank when the source master data does not contain a serial number.

@@ -1,6 +1,8 @@
 // --- CONFIGURATION ---
-const AUTH_PASS = "1234";
-const MASTER_PASS = "admin";
+const USER_PASS = "1234";
+const DEVELOPER_PASS = "1074";
+const ACCESS_MODE_USER = "user";
+const ACCESS_MODE_DEVELOPER = "developer";
 const MONTH_ORDER = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
 
 // --- STATE MANAGEMENT ---
@@ -15,6 +17,7 @@ let currentAuditEditId = null;
 let currentAuditEditRecord = null;
 let currentLockOwned = false;
 let loggedInUser = "";
+let currentAccessMode = "";
 let html5QrCode = null;
 let currentGaugeValue = 0;
 let targetGaugeValue = 0;
@@ -441,7 +444,7 @@ function updateDisplay() {
                     <td>
                         <div class="row-action-group">
                             <button class="btn-detail-row" onclick="openAuditDetail('${encodeActionValue(i.cloudId || i.id || i.barcode || '')}')">Detail</button>
-                            <button class="btn-delete-row" onclick="deleteRow('${encodeActionValue(i.cloudId || i.id || i.barcode || '')}')">Del</button>
+                            ${canDeleteAuditRecords() ? `<button class="btn-delete-row" onclick="deleteRow('${encodeActionValue(i.cloudId || i.id || i.barcode || '')}')">Del</button>` : ""}
                         </div>
                     </td>
                 </tr>`;
@@ -1493,15 +1496,73 @@ function closeModal() {
     }, 100);
 }
 
+function getAccessModeForPassword(password) {
+    if (password === USER_PASS) return ACCESS_MODE_USER;
+    if (password === DEVELOPER_PASS) return ACCESS_MODE_DEVELOPER;
+    return "";
+}
+
+function isDeveloperMode() {
+    return currentAccessMode === ACCESS_MODE_DEVELOPER;
+}
+
+function canDeleteAuditRecords() {
+    return currentAccessMode === ACCESS_MODE_USER ||
+           currentAccessMode === ACCESS_MODE_DEVELOPER;
+}
+
+function showAccessDenied(actionLabel) {
+    const message = `${actionLabel} is available in Developer Mode only.`;
+
+    if (typeof showToast === "function") {
+        showToast(message, "error");
+    } else {
+        alert(message);
+    }
+}
+
+function applyAccessMode(mode) {
+    currentAccessMode = mode === ACCESS_MODE_DEVELOPER
+        ? ACCESS_MODE_DEVELOPER
+        : ACCESS_MODE_USER;
+
+    const developerMode = isDeveloperMode();
+    document.body.dataset.accessMode = currentAccessMode;
+
+    const badge = document.getElementById('accessModeBadge');
+    if (badge) {
+        badge.textContent = developerMode ? "DEVELOPER MODE" : "USER MODE";
+        badge.classList.toggle('developer', developerMode);
+        badge.classList.toggle('user', !developerMode);
+    }
+
+    const clearCloudButton = document.getElementById('clearCloudButton');
+    if (clearCloudButton) {
+        clearCloudButton.hidden = !developerMode;
+        clearCloudButton.setAttribute('aria-hidden', String(!developerMode));
+    }
+
+    const logoutButton = document.getElementById('logoutButton');
+    if (logoutButton) {
+        logoutButton.textContent = developerMode ? "Logout & Clear" : "Logout";
+        logoutButton.title = developerMode
+            ? "Logout and clear cloud audit history"
+            : "Logout without deleting scan history or cloud data";
+        logoutButton.classList.toggle('logout-clear-mode', developerMode);
+    }
+}
+
 function checkLogin() {
     const usernameEl = document.getElementById('username');
     const passwordEl = document.getElementById('password');
 
-    const u = usernameEl ? usernameEl.value : "";
+    const u = usernameEl ? usernameEl.value.trim() : "";
     const p = passwordEl ? passwordEl.value : "";
+    const accessMode = getAccessModeForPassword(p);
 
-    if (u && p === AUTH_PASS) {
+    if (u && accessMode) {
         loggedInUser = u;
+        applyAccessMode(accessMode);
 
         const userDisp = document.getElementById('userDisp');
         const loginOverlay = document.getElementById('loginOverlay');
@@ -1514,15 +1575,22 @@ function checkLogin() {
         initScannerInput();
         updateDisplay();
     } else {
-        alert("Invalid Credentials");
+        alert("Invalid name or password");
     }
 }
 
 async function clearAllCloudData() {
-    if (!confirm("Clear all cloud audit history and temporary locks?")) return;
+    if (!isDeveloperMode()) {
+        showAccessDenied("Clear Cloud");
+        return;
+    }
 
-    await db.ref('audit_history').remove();
-    await db.ref('temporary_locks').remove();
+    if (!confirm("Clear all cloud audit history and temporary locks? This cannot be undone.")) return;
+
+    await Promise.all([
+        db.ref('audit_history').remove(),
+        db.ref('temporary_locks').remove()
+    ]);
 
     scanHistory = [];
     activeLocks = {};
@@ -1531,14 +1599,26 @@ async function clearAllCloudData() {
 }
 
 async function logout() {
-    if (confirm("Logout and Reset Scan Session?")) {
-        await db.ref('audit_history').remove();
-        await db.ref('temporary_locks').remove();
+    const developerMode = isDeveloperMode();
+    const message = developerMode
+        ? "Logout and clear all cloud audit history, temporary locks, and this device's pending scan queue? This cannot be undone."
+        : "Logout from User Mode? Scan history and cloud data will remain unchanged.";
 
+    if (!confirm(message)) return;
+
+    if (developerMode) {
+        await Promise.all([
+            db.ref('audit_history').remove(),
+            db.ref('temporary_locks').remove()
+        ]);
+
+        pendingUploads = [];
         localStorage.removeItem('pending_queue');
-
-        location.reload();
     }
+
+    currentAccessMode = "";
+    document.body.removeAttribute('data-access-mode');
+    location.reload();
 }
 
 function initScannerInput() {
@@ -1686,10 +1766,21 @@ function exportToExcel() {
 }
 
 function deleteRow(encodedKey) {
+    if (!canDeleteAuditRecords()) {
+        const message = "Please log in before deleting an audit record.";
+
+        if (typeof showToast === "function") {
+            showToast(message, "error");
+        } else {
+            alert(message);
+        }
+        return;
+    }
+
     const record = findAuditRecordByKey(encodedKey);
     const cloudId = record?.cloudId || decodeActionValue(encodedKey);
 
-    if (!confirm("Remove this audit record?")) return;
+    if (!confirm("Delete this audit record only? This cannot be undone.")) return;
 
     if (cloudId && isOnline) {
         db.ref('audit_history/' + cloudId).remove();
